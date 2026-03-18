@@ -1,5 +1,5 @@
 """
-👖 BLUE JEANS SERIES ENGINE v1.0 — main.py
+👖 BLUE JEANS SERIES ENGINE v1.1 — main.py
 시즌 아크 → 에피소드 씬 플랜 → 비트 집필 파이프라인
 © 2026 BLUE JEANS PICTURES
 """
@@ -17,6 +17,7 @@ from prompt import (
     SEASON_BEATS_6,
     EPISODE_BEATS,
     build_season_arc_prompt,
+    build_extract_elements_prompt,
     build_episode_plan_prompt,
     build_write_episode_beat_prompt,
     build_rewrite_prompt,
@@ -491,6 +492,7 @@ DEFAULTS = {
     "duration": 50,
     "genre": "범죄/스릴러",
     "season_arc": "",
+    "story_elements": "",
     "episode_plans": {},
     "episode_beats": {},
 }
@@ -657,7 +659,7 @@ def build_docx_download(text: str, filename: str, title: str = ""):
         footer = section.footer
         fp = footer.paragraphs[0]
         fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        fr = fp.add_run("BLUE JEANS SERIES ENGINE v1.0 · BLUE JEANS PICTURES")
+        fr = fp.add_run("BLUE JEANS SERIES ENGINE v1.1 · BLUE JEANS PICTURES")
         fr.font.size = Pt(7)
         fr.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
 
@@ -766,6 +768,33 @@ else:
             result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_ARC)
         st.session_state["season_arc"] = result
         st.rerun()
+
+
+# ══════════════════════════════════════════════
+# STEP 2.5: 핵심 요소 추출 (자동)
+# ══════════════════════════════════════════════
+
+if st.session_state["season_arc"] and not st.session_state["story_elements"]:
+    st.markdown(
+        '<div class="section-header">🔍 핵심 요소 추출 <span class="en">STORY ELEMENTS</span></div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("맥거핀 · 캐릭터 비밀 · 전술 · 핵심 장소 · 모티프 — 매 비트 집필 시 강제 주입됩니다.")
+
+    if st.button("🔍 핵심 요소 추출", type="primary", use_container_width=True):
+        prompt = build_extract_elements_prompt(
+            st.session_state["inputs"],
+            st.session_state["season_arc"],
+            genre,
+        )
+        with st.spinner("핵심 요소를 추출하고 있습니다..."):
+            result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_ARC)
+        st.session_state["story_elements"] = result
+        st.rerun()
+
+elif st.session_state["story_elements"]:
+    with st.expander("🔍 핵심 요소 (완료)", expanded=False):
+        st.markdown(st.session_state["story_elements"])
 
 
 # ══════════════════════════════════════════════
@@ -916,6 +945,7 @@ if st.session_state["episode_plans"]:
                     selected_ep, next_beat, ne, dur, genre,
                     prev_beat_text=prev_beat_text,
                     character_bible=char_bible,
+                    story_elements=st.session_state.get("story_elements", ""),
                 )
                 with st.spinner(f"EP{selected_ep} Beat {next_beat}을 집필하고 있습니다..."):
                     result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_BEAT)
@@ -952,7 +982,7 @@ if st.session_state["episode_plans"]:
                 disabled=not rewrite_instruction.strip() if isinstance(rewrite_instruction, str) else True,
             ):
                 original = st.session_state["episode_beats"][bk(selected_ep, last_done)]
-                prompt = build_rewrite_prompt(original, rewrite_instruction, genre)
+                prompt = build_rewrite_prompt(original, rewrite_instruction, genre, character_bible=char_bible)
                 with st.spinner(f"Beat {last_done}을 다시 쓰고 있습니다..."):
                     result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_REWRITE)
                 st.session_state["episode_beats"][bk(selected_ep, last_done)] = result
@@ -1008,4 +1038,4 @@ with st.expander("⚠️ 전체 초기화", expanded=False):
         st.rerun()
 
 st.markdown("---")
-st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.0")
+st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.1")
