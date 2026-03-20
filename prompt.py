@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────
-# BLUE JEANS SERIES ENGINE v1.4
+# BLUE JEANS SERIES ENGINE v1.5
 # prompt.py — Full Version (Writer Engine v2.2 통합)
 # © 2026 BLUE JEANS PICTURES
 # ─────────────────────────────────────────────────────────────
