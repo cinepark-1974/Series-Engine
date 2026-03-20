@@ -1,5 +1,5 @@
 """
-👖 BLUE JEANS SERIES ENGINE v1.2 — main.py
+👖 BLUE JEANS SERIES ENGINE v1.3 — main.py
 시즌 아크 → 에피소드 씬 플랜 → 비트 집필 파이프라인
 © 2026 BLUE JEANS PICTURES
 """
@@ -659,7 +659,7 @@ def build_docx_download(text: str, filename: str, title: str = ""):
         footer = section.footer
         fp = footer.paragraphs[0]
         fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        fr = fp.add_run("BLUE JEANS SERIES ENGINE v1.2 · BLUE JEANS PICTURES")
+        fr = fp.add_run("BLUE JEANS SERIES ENGINE v1.3 · BLUE JEANS PICTURES")
         fr.font.size = Pt(7)
         fr.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
 
@@ -1038,4 +1038,4 @@ with st.expander("⚠️ 전체 초기화", expanded=False):
         st.rerun()
 
 st.markdown("---")
-st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.2")
+st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.3")
