@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────
-# BLUE JEANS SERIES ENGINE v1.3
+# BLUE JEANS SERIES ENGINE v1.4
 # prompt.py — Full Version (Writer Engine v2.2 통합)
 # © 2026 BLUE JEANS PICTURES
 # ─────────────────────────────────────────────────────────────
@@ -82,12 +82,28 @@ BRAND PHILOSOPHY
 - 관객이 아는 비밀 (Dramatic Irony) + 관객도 모르는 비밀 (Mystery Box) 혼합.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
-앙상블 캐릭터
+앙상블 캐릭터 (Creator Engine 연동)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-4~8명 POV 로테이션. 매 에피소드마다 "이번 회의 주인공"이 있다.
-역할: 주인공 / 적대자 / 동맹자 / 거울 / 비밀 보유자 / 새 인물 / 희생자 / 와일드카드
-- 에피소드 아크 (소규모 변화) + 시즌 아크 (근본적 변화) 이중 구조.
+Creator Engine의 캐릭터 구조:
+- characters (필수 4인): protagonist / antagonist / ally / mirror
+- extended_characters (추가 0~4인): catalyst / subplot_lead / mentor / rival / informant / love_interest 등
+- 시리즈는 총 6~8인이 적정.
+
+시리즈 역할 재배치:
+필수 4인 + 시리즈 확장 역할: 비밀 보유자 / 새 인물 / 희생자 / 와일드카드
+매 에피소드마다 "이번 회의 주인공"이 있다. 나머지 인물은 B/C 스토리에서 진행.
+8부작 기준: 주인공 POV 3~4회, 나머지 인물 1~2회씩.
+
+에피소드 아크 (소규모 변화) + 시즌 아크 (근본적 변화) 이중 구조.
+
+캐릭터 바이블 필수 참조 항목 (Creator Engine 산출물):
+- tactics: 장애물을 넘는 전술 3가지 → 전술이 곧 캐릭터. 시리즈에서 전술은 에피소드마다 변화하며 시즌 아크를 만든다.
+- secret: 비밀 1개 → 시리즈의 비밀 경제와 직결. 폭로 타이밍이 시즌 구조.
+- speech_pattern: 말투 규칙 3개 → 8시간 동안 관객 귀에 남는 시그니처. 누가 말해도 같은 말투이면 실패.
+- sample_lines: 평상시/분노/취약한 순간 대사 → 감정 변화에 따른 대사 톤 변주.
+- relationship_attitudes: 상대 캐릭터별 태도 → 앙상블 간 관계 역학의 기초.
+- arc_detail: 1막 끝/미드포인트/클라이맥스 상태 → 에피소드별 아크 설계의 기준점.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 멀티 스토리라인 직조
@@ -666,11 +682,13 @@ EP1~EP{num_episodes}, 각 에피소드:
 - 시즌 질문 진전도
 
 ### 4. 캐릭터별 시즌 아크
-앙상블 전원(4~8명):
-- 역할 (주인공/적대자/동맹자/거울/비밀보유자/새인물/희생자/와일드카드)
-- 전술 (Tactics = Character: 장애물을 넘는 방식 3가지)
+앙상블 전원(characters 4인 + extended_characters):
+- 역할 (protagonist/antagonist/ally/mirror + 확장: catalyst/subplot_lead/mentor/rival/informant 등)
+- 전술 (Tactics = Character: 장애물을 넘는 방식 3가지 — 바이블의 tactics 참조)
+- 비밀 (Secret: 시즌 비밀 경제와 연결 — 바이블의 secret 참조)
 - EP1 출발점 → EP{num_episodes} 도착점 (시즌 아크)
 - POV 에피소드
+- 에피소드별 아크 키포인트 (arc_detail 기반)
 
 ### 5. Secret Map (비밀 지도)
 비밀 A: [내용] — 소유자 — 공개: EP? — 폭발: ?
@@ -721,11 +739,19 @@ def build_extract_elements_prompt(
 
 ===캐릭터 비밀===
 - (인물명)의 비밀: (내용) — 폭로 시점: EP? — 폭로 시 영향: (누구에게 어떤 변화)
-(시즌 아크의 Secret Map + 캐릭터 바이블에서 모두 추출)
+(시즌 아크의 Secret Map + 캐릭터 바이블의 secret 항목에서 모두 추출)
 
 ===캐릭터 전술===
 - (인물명): 전술1 / 전술2 / 전술3
-(Tactics = Character: 장애물을 넘는 방식. 캐릭터 바이블에서 추출)
+(Tactics = Character: 장애물을 넘는 방식. 캐릭터 바이블의 tactics 항목에서 추출)
+
+===캐릭터 말투 시그니처===
+- (인물명): speech_pattern 요약 + 감정별 톤 변화 (normal→angry→vulnerable)
+(캐릭터 바이블의 speech_pattern + sample_lines에서 추출)
+
+===캐릭터 관계 역학===
+- (인물A) ↔ (인물B): 관계 + 태도 변화 방향
+(캐릭터 바이블의 relationship_attitudes에서 추출. 앙상블 전원의 교차 관계)
 
 ===핵심 장소===
 - (장소명): (역할) — (감정적 의미) — (반복 등장 규칙)
@@ -944,6 +970,14 @@ def build_write_episode_beat_prompt(
 [캐릭터 바이블 — 각 인물의 말투·리듬·태도를 반드시 반영]
 {char_block}
 
+[캐릭터 바이블 활용 규칙]
+- speech_pattern(말투 규칙 3개): 각 인물의 대사가 이 규칙을 따르는지 매 씬 점검.
+- sample_lines(평상시/분노/취약): 이 씬에서 인물의 감정 상태에 맞는 톤 적용.
+- tactics(전술 3가지): 이 씬에서 인물이 장애물을 넘는 방식이 바이블의 전술과 일치하는지 확인.
+- secret(비밀): 이 비트에서 비밀이 유지/위협/폭로되는가?
+- relationship_attitudes(관계별 태도): 대화 상대에 따라 태도가 달라져야 한다.
+- arc_detail: 현재 에피소드가 시즌 아크의 어느 지점인지 확인하고, 인물 상태를 맞춰라.
+
 [세계관]
 {inputs.get('world', '')[:1500] or '(씬 플랜 참조)'}
 
@@ -1059,7 +1093,7 @@ EP{ep_num} — Beat {beat_num}. {beat_info['name']}
 - B-Story 진행: 이 비트에서 B-Story 시간축이 어떻게 전진했는가
 - 관객 심리: 현재 유지 중인 열린 질문 / Dramatic Irony
 - 비밀 경제: 이 비트에서의 비밀 상태
-- 보이스 점검 1줄
+- 보이스 점검: 각 인물의 speech_pattern 준수 여부 + sample_lines 톤 일치 여부
 """.strip()
 
 
