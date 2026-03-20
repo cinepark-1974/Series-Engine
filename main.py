@@ -441,14 +441,14 @@ st.markdown(
     '</div>',
     unsafe_allow_html=True
 )
-st.caption(f"집필: {MODEL_WRITE} · 구조: {MODEL_PLAN}")
-
 
 # ──────────────────────────────────────────────
 # API 클라이언트
 # ──────────────────────────────────────────────
 MODEL_WRITE = "claude-opus-4-6"       # 집필 (비트 쓰기, 다시 쓰기) — 최고 품질
 MODEL_PLAN  = "claude-sonnet-4-6"    # 구조 작업 (시즌 아크, 씬 플랜, 요소 추출) — 비용 효율
+
+st.caption(f"집필: {MODEL_WRITE} · 구조: {MODEL_PLAN}")
 MAX_TOKENS_ARC = 8000
 MAX_TOKENS_PLAN = 8000
 MAX_TOKENS_BEAT = 16000
