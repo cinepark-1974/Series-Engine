@@ -1,5 +1,5 @@
 """
-👖 BLUE JEANS SERIES ENGINE v1.4 — main.py
+👖 BLUE JEANS SERIES ENGINE v1.5 — main.py
 시즌 아크 → 에피소드 씬 플랜 → 비트 집필 파이프라인
 © 2026 BLUE JEANS PICTURES
 """
@@ -441,12 +441,14 @@ st.markdown(
     '</div>',
     unsafe_allow_html=True
 )
+st.caption(f"집필: {MODEL_WRITE} · 구조: {MODEL_PLAN}")
 
 
 # ──────────────────────────────────────────────
 # API 클라이언트
 # ──────────────────────────────────────────────
-MODEL = "claude-sonnet-4-6"
+MODEL_WRITE = "claude-opus-4-6"       # 집필 (비트 쓰기, 다시 쓰기) — 최고 품질
+MODEL_PLAN  = "claude-sonnet-4-6"    # 구조 작업 (시즌 아크, 씬 플랜, 요소 추출) — 비용 효율
 MAX_TOKENS_ARC = 8000
 MAX_TOKENS_PLAN = 8000
 MAX_TOKENS_BEAT = 16000
@@ -462,13 +464,14 @@ def get_client():
     return anthropic.Anthropic(api_key=api_key)
 
 
-def stream_response(system: str, user_prompt: str, max_tokens: int):
-    """Claude API 스트리밍 호출."""
+def stream_response(system: str, user_prompt: str, max_tokens: int, model: str = ""):
+    """Claude API 스트리밍 호출. model 미지정 시 WRITE 모델 사용."""
+    use_model = model or MODEL_WRITE
     client = get_client()
     collected = []
     placeholder = st.empty()
     with client.messages.stream(
-        model=MODEL,
+        model=use_model,
         max_tokens=max_tokens,
         system=system,
         messages=[{"role": "user", "content": user_prompt}],
@@ -659,7 +662,7 @@ def build_docx_download(text: str, filename: str, title: str = ""):
         footer = section.footer
         fp = footer.paragraphs[0]
         fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        fr = fp.add_run("BLUE JEANS SERIES ENGINE v1.4 · BLUE JEANS PICTURES")
+        fr = fp.add_run("BLUE JEANS SERIES ENGINE v1.5 · BLUE JEANS PICTURES")
         fr.font.size = Pt(7)
         fr.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
 
@@ -765,7 +768,7 @@ else:
             st.session_state["inputs"], ne, dur, genre,
         )
         with st.spinner("시즌 아크를 설계하고 있습니다..."):
-            result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_ARC)
+            result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_ARC, model=MODEL_PLAN)
         st.session_state["season_arc"] = result
         st.rerun()
 
@@ -788,7 +791,7 @@ if st.session_state["season_arc"] and not st.session_state["story_elements"]:
             genre,
         )
         with st.spinner("핵심 요소를 추출하고 있습니다..."):
-            result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_ARC)
+            result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_ARC, model=MODEL_PLAN)
         st.session_state["story_elements"] = result
         st.rerun()
 
@@ -866,7 +869,7 @@ if st.session_state["season_arc"]:
                 prev_episode_last_scene=prev_last_scene,
             )
             with st.spinner(f"EP{next_ep} 씬 플랜을 작성하고 있습니다..."):
-                result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_PLAN)
+                result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_PLAN, model=MODEL_PLAN)
             st.session_state["episode_plans"][next_ep] = result
             st.rerun()
 
@@ -1038,4 +1041,4 @@ with st.expander("⚠️ 전체 초기화", expanded=False):
         st.rerun()
 
 st.markdown("---")
-st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.4")
+st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.5")
