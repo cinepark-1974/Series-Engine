@@ -1,5 +1,5 @@
 """
-👖 BLUE JEANS SERIES ENGINE v1.3 — main.py
+👖 BLUE JEANS SERIES ENGINE v1.4 — main.py
 시즌 아크 → 에피소드 씬 플랜 → 비트 집필 파이프라인
 © 2026 BLUE JEANS PICTURES
 """
@@ -659,7 +659,7 @@ def build_docx_download(text: str, filename: str, title: str = ""):
         footer = section.footer
         fp = footer.paragraphs[0]
         fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        fr = fp.add_run("BLUE JEANS SERIES ENGINE v1.3 · BLUE JEANS PICTURES")
+        fr = fp.add_run("BLUE JEANS SERIES ENGINE v1.4 · BLUE JEANS PICTURES")
         fr.font.size = Pt(7)
         fr.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
 
@@ -708,7 +708,7 @@ INPUT_FIELDS = [
     ("logline",    "① 로그라인",           "Creator Engine의 Logline Pack (시리즈용, 시즌 질문 포함)"),
     ("intention",  "② 기획의도",           "Creator Engine의 KEY POINTS"),
     ("gns",        "③ GNS",               "Goal / Need / Strategy"),
-    ("characters", "④ 캐릭터 + 바이블",    "앙상블 4~8인의 캐릭터 설정 + 바이블 (말투·성격·어휘)"),
+    ("characters", "④ 캐릭터 + 바이블",    "characters(4인) + extended_characters + 바이블 (tactics·secret·speech_pattern·sample_lines)"),
     ("world",      "⑤ 세계관",             "World Building"),
     ("structure",  "⑥ 구조",               "Synopsis + Storyline + Beat Sheet (시즌 아크 기준)"),
     ("scenes",     "⑦ 장면 설계",          "에피소드별 핵심 장면"),
@@ -1038,4 +1038,4 @@ with st.expander("⚠️ 전체 초기화", expanded=False):
         st.rerun()
 
 st.markdown("---")
-st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.3")
+st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.4")
