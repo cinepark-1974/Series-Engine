@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────
-# BLUE JEANS SERIES ENGINE v1.1
+# BLUE JEANS SERIES ENGINE v1.2
 # prompt.py — Full Version (Writer Engine v2.2 통합)
 # © 2026 BLUE JEANS PICTURES
 # ─────────────────────────────────────────────────────────────
@@ -58,11 +58,19 @@ BRAND PHILOSOPHY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 매 에피소드 끝에 반드시 클리프행어.
+클리프행어 = 관객이 다음 화를 즉시 재생하지 않으면 견딜 수 없는 질문/위협/반전.
+
 유형: Revelation / Threat / Choice / Betrayal / Reversal / Arrival / Question
 - EP1~3: Revelation·Question (세계를 넓히는)
 - EP4 Midpoint: Reversal·Betrayal (게임 체인저)
 - EP5~7: Threat·Choice (판돈을 올리는)
 - EP8 Finale: Resolution + 새로운 Question
+
+클리프행어 실패 신호:
+- 다음 에피소드 시작 5분 안에 완전 해결됨 → 사기
+- 메인 스토리와 무관함 → 가지치기
+- 같은 유형의 클리프행어가 3회 연속 → 예측 가능
+- 클리프행어 없이 에피소드가 깔끔하게 끝남 → 다음 회 시청 동기 소멸
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 비밀 경제 (Secret Economy)
@@ -88,6 +96,42 @@ BRAND PHILOSOPHY
 A-Story (40~50%) + B-Story (25~30%) + C-Story (15~20%) + D-Story (5~10%)
 - A·B는 매 에피소드 교차. 전환은 감정 대비로.
 - Midpoint(EP4)에서 A·B 충돌, Finale(EP8)에서 A·B·C 합류.
+
+B-Story 설계 원칙 (시리즈 특화):
+- B-Story는 단순 서브플롯이 아니라 A-Story에 압박을 가하는 독립된 플롯이다.
+- B-Story = 테마의 통로. A-Story가 사건이라면, B-Story가 메시지를 운반한다.
+- B-Story는 자체 시간축(카운트다운/데드라인/사회변화)을 가진다.
+- B-Story의 시간축 변화가 매 에피소드에서 A-Story 주인공의 선택을 제한하거나 강요한다.
+- B-Story 진행 상황이 매 에피소드 안에 시각적으로 드러나야 한다 (뉴스 화면, 거리 풍경, 대화 중 언급, 자막).
+- 에피소드 내 A-Story와 B-Story 비중은 대략 7:3 또는 6:4.
+- B-Story가 A-Story와 합류하지 않고 따로 끝나면 가지치기다.
+- B-Story의 해결이 주인공의 최종 선택에 영향을 줘야 한다.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5단계 서술 구조 (비트 집필 MANDATORY)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+매 비트의 시나리오는 반드시 다음 5단계가 내부에서 작동해야 한다:
+
+① STATUS QUO — 이 비트 시작 시 상황. 인물이 어디에, 뭘 하고, 뭘 모르는가.
+② EVENT — 상황을 바꾸는 행동/발견/충돌. 이것이 없으면 비트가 아니다.
+③ DECISION — 인물의 선택. 선택이 없으면 인물이 수동적. 수동적 인물은 이야기를 못 끈다.
+④ CONSEQUENCE — 선택의 되돌릴 수 없는 결과. 다음 비트의 STATUS QUO가 달라진다.
+⑤ NEW STATUS QUO + HOOK — ①과 반드시 달라야 한다. 마지막은 다음 비트로의 미끼.
+
+검증:
+- ①과 ⑤에서 상황이 바뀌었는가? → 안 바뀌었으면 사건이 없다.
+- 인물이 선택을 했는가? → 선택이 없으면 다시 써라.
+- 선택이 되돌릴 수 없는 결과를 만들었는가? → 결과가 없으면 다시 써라.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+에피소드 간 연결 규칙
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- EP2~EP8의 첫 비트(콜드 오프닝)는 이전 에피소드 클리프행어의 즉각적 결과로 시작한다.
+- 클리프행어가 다음 에피소드 시작 5분 안에 완전 해결되면 사기다 — 부분 해결만 허용.
+- 에피소드 간 감정 연쇄: 클리프행어의 감정이 다음 콜드 오프닝의 전제다.
+- B-Story의 시간축은 에피소드를 넘어 연속된다 — 매 에피소드에서 B-Story 시간이 전진해야 한다.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SCENE RULES (씬 문법)
@@ -326,6 +370,24 @@ GENRE_RULES = {
         "fails": ["압박 약함", "단서 평면적", "반전 억지", "인물이 너무 쉽게 말함"],
         "forbidden": "수사관의 독백으로 사건 정리, 우연의 단서 발견",
     },
+    "느와르": {
+        "en": "Noir / Crime Noir Series",
+        "core": "도덕적 모호함 속 타락과 생존 대가를 보여주는 장르.",
+        "engine": "비밀 엔진 + 관계 엔진 — 매 회 동맹과 배신의 경계가 이동",
+        "season_q": "\"주인공은 어디까지 타락하는가?\" 또는 \"이 게임에서 살아남는 자는 누구인가?\"",
+        "opening": "끝에서 시작 — 주인공의 파국 직전/직후 또는 냉소적 내레이션. 관객은 '어떻게 여기까지 왔나'를 궁금해한다.",
+        "ep_pattern": "EP1:거래제안+일상균열 / EP4:배신이중주(누가적인가) / EP6:도덕선완전붕괴 / EP8:대가지불+아이러니결말",
+        "items": [
+            "moral_ambiguity", "fatalistic_inevitability", "power_corruption",
+            "betrayal_architecture", "paranoia_escalation", "dark_irony",
+            "visual_shadow_contrast", "voice_cynicism", "loyalty_test", "cost_of_survival",
+        ],
+        "hooks": "어둠 속 이미지 / 내레이션의 냉소적 한 줄 / 피할 수 없는 거래 제안",
+        "punches": "배신의 순간 / 도덕선을 넘는 선택 / 아이러니한 대가",
+        "cliffhangers": "동맹이 적에게 전화하는 장면 / 주인공이 선을 넘는 순간 / 이중 배신",
+        "fails": ["선악 명확", "배신 무게 부족", "분위기만 있고 서사 압력 없음", "타락 비납득"],
+        "forbidden": "도덕적 명확성, 권선징악 결말, 분위기만으로 채우는 씬",
+    },
     "드라마": {
         "en": "Drama Series",
         "core": "인간의 선택과 대가를 통해 관계의 진실에 도달하는 장르.",
@@ -343,6 +405,42 @@ GENRE_RULES = {
         "cliffhangers": "관계의 균열 / 숨겨진 진실 폭로 / 선택의 순간",
         "fails": ["감정이 표면적", "인물이 평면적", "관계 변화 없음", "대가 부재"],
         "forbidden": "감정을 직접 말하는 대사 (Too Wet), 갈등 없는 화해",
+    },
+    "액션": {
+        "en": "Action Series",
+        "core": "물리적 목표와 대가 속에서 캐릭터 의지를 증명하는 장르.",
+        "engine": "사건 엔진 — 매 회 미션/작전이 에스컬레이션",
+        "season_q": "\"주인공은 임무를 완수하는가?\" 또는 \"대가를 치르고도 싸울 가치가 있는가?\"",
+        "opening": "미션 진행 중 — 설명 없이 체이스, 전투, 또는 작전 한복판에서 시작.",
+        "ep_pattern": "EP1:능력과시+미션부여 / EP4:패배또는배신 / EP6:최대위기 / EP8:최종작전+대가",
+        "items": [
+            "physical_objective_clarity", "spatial_clarity", "tactical_reversal",
+            "rising_physical_cost", "kinetic_identity", "consequence_visibility",
+            "unique_setpiece_logic", "emotional_stake_inside_action", "momentum", "aftermath_value",
+        ],
+        "hooks": "목표가 명확하다 / 공간이 보인다 / 시간이 없다",
+        "punches": "전술이 뒤집힌다 / 대가가 몸에 새겨진다 / 다음 전투가 더 크다",
+        "cliffhangers": "작전 실패 / 동료 포획 / 더 큰 위협의 등장",
+        "fails": ["목표 흐림", "공간 안 보임", "액션 후 대가 없음", "같은 패턴 반복"],
+        "forbidden": "설명으로 처리하는 액션, 무의미한 총격전 반복, 빌런의 동기 없는 폭력",
+    },
+    "코미디": {
+        "en": "Comedy Series",
+        "core": "웃음 메커니즘이 작동하는 장르. 떠드는 장르가 아니다.",
+        "engine": "관계 엔진 + 사건 엔진 — 매 회 캐릭터 결함이 새로운 사고를 친다",
+        "season_q": "\"이 인물은 자기 결함을 극복하는가?\" 또는 \"이 관계는 어디로 가는가?\"",
+        "opening": "결함 폭발 — 주인공의 결함이 3분 안에 사고를 친다.",
+        "ep_pattern": "매 회 거짓말/오해가 쌓이고, 시즌 진행에 따라 점점 커진다.",
+        "items": [
+            "premise_engine", "comic_contradiction", "character_comic_flaw",
+            "comic_escalation", "line_surprise", "status_comedy",
+            "timing_precision", "callback_payoff", "scene_comic_engine", "joke_density",
+        ],
+        "hooks": "일상적 상황의 비틀림 / 캐릭터 결함이 즉시 드러나는 행동",
+        "punches": "callback이 터진다 / 상황이 더 꼬인다 / 역전된 status",
+        "cliffhangers": "거짓말이 들통 직전 / 오해가 극대화 / 예상 못한 인물 등장",
+        "fails": ["설정 안 웃김", "캐릭터 결함이 웃음 비생산", "대사 길고 뻔함", "농담이 서사 정지"],
+        "forbidden": "상황 설명으로 웃기려는 시도, 같은 개그 반복, 인물 비하로 웃음 유발",
     },
     "호러": {
         "en": "Horror Series",
