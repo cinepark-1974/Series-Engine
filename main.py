@@ -1,5 +1,5 @@
 """
-👖 BLUE JEANS SERIES ENGINE v1.5 — main.py
+👖 BLUE JEANS SERIES ENGINE v1.6 — main.py
 시즌 아크 → 에피소드 씬 플랜 → 비트 집필 파이프라인
 © 2026 BLUE JEANS PICTURES
 """
@@ -16,6 +16,7 @@ from prompt import (
     SEASON_BEATS_8,
     SEASON_BEATS_6,
     EPISODE_BEATS,
+    build_locked_block,
     build_season_arc_prompt,
     build_extract_elements_prompt,
     build_episode_plan_prompt,
@@ -441,14 +442,14 @@ st.markdown(
     '</div>',
     unsafe_allow_html=True
 )
+st.caption(f"집필: {MODEL_WRITE} · 구조: {MODEL_PLAN}")
+
 
 # ──────────────────────────────────────────────
 # API 클라이언트
 # ──────────────────────────────────────────────
 MODEL_WRITE = "claude-opus-4-6"       # 집필 (비트 쓰기, 다시 쓰기) — 최고 품질
 MODEL_PLAN  = "claude-sonnet-4-6"    # 구조 작업 (시즌 아크, 씬 플랜, 요소 추출) — 비용 효율
-
-st.caption(f"집필: {MODEL_WRITE} · 구조: {MODEL_PLAN}")
 MAX_TOKENS_ARC = 8000
 MAX_TOKENS_PLAN = 8000
 MAX_TOKENS_BEAT = 16000
@@ -498,6 +499,8 @@ DEFAULTS = {
     "story_elements": "",
     "episode_plans": {},
     "episode_beats": {},
+    "locked_items": [],
+    "open_items": [],
 }
 
 for k, v in DEFAULTS.items():
@@ -578,6 +581,15 @@ render_stepper()
 
 def bk(ep: int, beat: int) -> str:
     return f"{ep}_{beat}"
+
+
+def _get_locked_block() -> str:
+    """현재 세션의 LOCKED/OPEN 항목으로 프롬프트 주입 블록 생성."""
+    locked = st.session_state.get("locked_items", [])
+    open_items = st.session_state.get("open_items", [])
+    if not locked and not open_items:
+        return ""
+    return build_locked_block(locked, open_items)
 
 
 def get_all_episode_text(ep: int) -> str:
@@ -662,7 +674,7 @@ def build_docx_download(text: str, filename: str, title: str = ""):
         footer = section.footer
         fp = footer.paragraphs[0]
         fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        fr = fp.add_run("BLUE JEANS SERIES ENGINE v1.5 · BLUE JEANS PICTURES")
+        fr = fp.add_run("BLUE JEANS SERIES ENGINE v1.6 · BLUE JEANS PICTURES")
         fr.font.size = Pt(7)
         fr.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
 
@@ -707,10 +719,46 @@ with col_s3:
         index=genre_options.index(st.session_state["genre"]) if st.session_state["genre"] in genre_options else 0,
     )
 
+# LOCKED / OPEN 설정
+with st.expander("🔒 설정 잠금 (LOCKED / OPEN)", expanded=False):
+    st.caption(
+        "LOCKED = 파이프라인 전 과정에서 절대 변경 불가. "
+        "OPEN = AI가 자유롭게 창작 가능. 한 줄에 하나씩 입력하세요."
+    )
+    col_lock, col_open = st.columns(2)
+    with col_lock:
+        locked_input = st.text_area(
+            "🔒 LOCKED (변경 불가)",
+            value="\n".join(st.session_state["locked_items"]),
+            height=150,
+            placeholder=(
+                "한 줄에 하나씩:\n"
+                "서재중: 29세, 묘적사 현장 요원\n"
+                "기획의도: 20대 취업난이 재중의 입사 동기에 반영\n"
+                "B-Story: 대선 D-47부터 선거일까지 카운트다운"
+            ),
+            key="locked_input",
+        )
+    with col_open:
+        open_input = st.text_area(
+            "🟢 OPEN (창작 가능)",
+            value="\n".join(st.session_state["open_items"]),
+            height=150,
+            placeholder=(
+                "한 줄에 하나씩:\n"
+                "캐릭터 외형, 습관, 말투 디테일\n"
+                "장면별 시각 연출과 감정 변화\n"
+                "대사의 구체적 워딩"
+            ),
+            key="open_input",
+        )
+    st.session_state["locked_items"] = [l.strip() for l in locked_input.strip().split("\n") if l.strip()] if locked_input.strip() else []
+    st.session_state["open_items"] = [l.strip() for l in open_input.strip().split("\n") if l.strip()] if open_input.strip() else []
+
 INPUT_FIELDS = [
     ("logline",    "① 로그라인",           "Creator Engine의 Logline Pack (시리즈용, 시즌 질문 포함)"),
     ("intention",  "② 기획의도",           "Creator Engine의 KEY POINTS"),
-    ("gns",        "③ GNS",               "Goal / Need / Strategy"),
+    ("gns",        "③ GNS + 서사동력",     "Goal / Need / Strategy + narrative_drive (desire_origin·arc_direction·goal_need_gap)"),
     ("characters", "④ 캐릭터 + 바이블",    "characters(4인) + extended_characters + 바이블 (tactics·secret·speech_pattern·sample_lines)"),
     ("world",      "⑤ 세계관",             "World Building"),
     ("structure",  "⑥ 구조",               "Synopsis + Storyline + Beat Sheet (시즌 아크 기준)"),
@@ -766,6 +814,7 @@ else:
     if st.button(f"🎬 {ne}부작 시즌 아크 설계 시작", disabled=not has_input, type="primary", use_container_width=True):
         prompt = build_season_arc_prompt(
             st.session_state["inputs"], ne, dur, genre,
+            locked_block=_get_locked_block(),
         )
         with st.spinner("시즌 아크를 설계하고 있습니다..."):
             result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_ARC, model=MODEL_PLAN)
@@ -789,6 +838,7 @@ if st.session_state["season_arc"] and not st.session_state["story_elements"]:
             st.session_state["inputs"],
             st.session_state["season_arc"],
             genre,
+            locked_block=_get_locked_block(),
         )
         with st.spinner("핵심 요소를 추출하고 있습니다..."):
             result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_ARC, model=MODEL_PLAN)
@@ -867,6 +917,7 @@ if st.session_state["season_arc"]:
                 next_ep, ne, dur, genre,
                 prev_episode_plan=prev_plan,
                 prev_episode_last_scene=prev_last_scene,
+                locked_block=_get_locked_block(),
             )
             with st.spinner(f"EP{next_ep} 씬 플랜을 작성하고 있습니다..."):
                 result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_PLAN, model=MODEL_PLAN)
@@ -949,6 +1000,7 @@ if st.session_state["episode_plans"]:
                     prev_beat_text=prev_beat_text,
                     character_bible=char_bible,
                     story_elements=st.session_state.get("story_elements", ""),
+                    locked_block=_get_locked_block(),
                 )
                 with st.spinner(f"EP{selected_ep} Beat {next_beat}을 집필하고 있습니다..."):
                     result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_BEAT)
@@ -985,7 +1037,7 @@ if st.session_state["episode_plans"]:
                 disabled=not rewrite_instruction.strip() if isinstance(rewrite_instruction, str) else True,
             ):
                 original = st.session_state["episode_beats"][bk(selected_ep, last_done)]
-                prompt = build_rewrite_prompt(original, rewrite_instruction, genre, character_bible=char_bible)
+                prompt = build_rewrite_prompt(original, rewrite_instruction, genre, character_bible=char_bible, locked_block=_get_locked_block())
                 with st.spinner(f"Beat {last_done}을 다시 쓰고 있습니다..."):
                     result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_REWRITE)
                 st.session_state["episode_beats"][bk(selected_ep, last_done)] = result
@@ -1041,4 +1093,4 @@ with st.expander("⚠️ 전체 초기화", expanded=False):
         st.rerun()
 
 st.markdown("---")
-st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.5")
+st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.6")
