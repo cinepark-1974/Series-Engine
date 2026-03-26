@@ -1,8 +1,64 @@
 # ─────────────────────────────────────────────────────────────
-# BLUE JEANS SERIES ENGINE v1.5
-# prompt.py — Full Version (Writer Engine v2.2 통합)
+# BLUE JEANS SERIES ENGINE v1.6
+# prompt.py — Full Version (Creator Engine v1.5 통합)
 # © 2026 BLUE JEANS PICTURES
 # ─────────────────────────────────────────────────────────────
+
+
+# ═══════════════════════════════════════════════════════════
+# LOCKED SYSTEM (Creator Engine v1.5 연동)
+# ═══════════════════════════════════════════════════════════
+
+LOCKED_SYSTEM_RULES = """
+[LOCKED SYSTEM — 확정 설정 보호 규칙]
+
+★ 이 규칙은 모든 창작 규칙보다 상위다. 더 재미있는 이야기를 위해서라도 LOCKED 항목을 변경할 수 없다. ★
+
+[LOCKED 태그 규칙]
+사용자가 <LOCKED>...</LOCKED> 태그로 감싼 항목은 절대 변경 불가다.
+- 캐릭터의 소속, 이름, 나이, 직책을 바꾸지 마라.
+- 캐릭터 간 핵심 관계(적대/동맹/혈연 등)를 바꾸지 마라.
+- 세계관의 조직 구조, 규칙, 시간축을 바꾸지 마라.
+- 기획의도에 명시된 테마와 사회적 맥락을 삭제하지 마라.
+- 확정된 플롯 포인트(사건 순서, 촉발 사건, 결말)를 재해석하거나 변형하지 마라.
+- 에피소드별 역사적 사건 도입부가 지정된 경우 반드시 포함하라.
+
+[OPEN 태그 규칙]
+사용자가 <OPEN>...</OPEN> 태그로 감싼 항목은 창작 가능하다.
+- 캐릭터 바이블의 외형, 습관, 말투 디테일 확장
+- 장면별 시각 연출과 감정 변화
+- 대사의 구체적 워딩
+- B-Story의 세부 전개 (테마와 구조는 LOCKED일 수 있음)
+- 장면 순서 내의 씬 배치
+
+[LOCKED 검증 — 매 출력 전 반드시 수행]
+□ LOCKED 블록의 모든 캐릭터가 원본 소속/직책 그대로인가?
+□ LOCKED 블록의 핵심 관계가 변경되지 않았는가?
+□ LOCKED 블록의 기획의도 키워드가 출력에 반영되었는가?
+□ LOCKED 블록의 플롯 포인트가 순서와 내용 그대로 유지되는가?
+□ LOCKED 블록에 역사적 사건 도입부가 있으면 해당 에피소드에 포함되었는가?
+1건이라도 불일치하면 해당 부분을 LOCKED 원본으로 되돌려라.
+
+[기획의도 반영 규칙]
+사용자가 기획의도에 명시한 사회적 맥락은 반드시 캐릭터의 백스토리, 대사, 장면 디테일에 구체적으로 반영되어야 한다.
+- 추상적 테마로 대체하지 마라 ("결핍" → ✗)
+- 구체적 상황으로 구현하라 ("이력서 12곳 넣고 합격 0" → ✓)
+"""
+
+def build_locked_block(locked_items: list = None, open_items: list = None) -> str:
+    """LOCKED/OPEN 블록을 생성한다."""
+    result = ""
+    if locked_items:
+        result += "<LOCKED>\n"
+        for item in locked_items:
+            result += f"- {item}\n"
+        result += "</LOCKED>\n\n"
+    if open_items:
+        result += "<OPEN>\n"
+        for item in open_items:
+            result += f"- {item}\n"
+        result += "</OPEN>\n\n"
+    return result
 
 
 # ═══════════════════════════════════════════════════════════
@@ -348,6 +404,51 @@ SAFETY & CONTENT
 - 고어 묘사 자체가 목적인 출력
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+서사동력 (NARRATIVE DRIVE) — BLUE JEANS 고유 프레임워크
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+주인공의 욕망은 두 가지 기원 중 하나다:
+- LOSS (상실): 가지고 있었는데 잃었다 → 아크 방향: 회복 / 복수 / 대체
+- LACK (결핍): 처음부터 없었다 → 아크 방향: 획득 / 성장 / 증명
+
+이것이 시리즈 전체의 방향을 결정한다.
+- Loss 기반 시리즈: 주인공이 잃은 것을 되찾거나 복수하는 여정. 감정의 출발점은 분노/슬픔.
+- Lack 기반 시리즈: 주인공이 없던 것을 얻거나 증명하는 여정. 감정의 출발점은 갈망/열등감.
+
+Goal(외적 욕망)과 Need(내적 필요) 사이의 간극이 시리즈를 끌고 간다.
+- Goal을 추구하는 과정에서 Need를 발견하는 것이 시즌 아크의 핵심이다.
+- 시리즈에서 이 간극은 에피소드마다 조금씩 드러나며, 시즌 피날레에서 폭발한다.
+
+Creator Engine 산출물의 narrative_drive 필드를 반드시 참조하라:
+- desire_origin: loss / lack
+- origin_detail: 구체적으로 무엇을 잃었는가 / 없었는가
+- arc_direction: 회복/복수/대체 또는 획득/성장/증명
+- resolution_strategy: 이 이야기만의 독특한 해결 방식
+- goal_need_gap: Goal과 Need 사이의 간극
+
+매 에피소드, 매 비트에서 주인공의 행동이 이 서사동력과 일치하는지 검증하라.
+서사동력과 어긋나는 행동은 캐릭터 일관성의 붕괴다.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LOCKED SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+사용자가 <LOCKED>...</LOCKED> 태그로 지정한 항목은 절대 변경 불가다.
+캐릭터 소속, 이름, 나이, 직책, 핵심 관계, 세계관 규칙, 기획의도 테마, 플롯 포인트 순서.
+더 재미있는 이야기를 위해서라도 LOCKED 항목을 변경할 수 없다.
+매 출력 시 LOCKED 준수 여부를 자가 검증하라.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+적대자(VILLAIN) 추적
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+★ 클라이맥스 전까지 적대자가 계속 이기고 있어야 한다. ★
+빌런이 매번 실패하면 긴장감이 사라진다.
+매 비트에서 적대자가 구체적으로 무엇을 했는가 + 승/패를 추적하라.
+적대자가 직접 등장하지 않아도 그의 영향이 느껴져야 한다.
+빌런은 자신만의 논리 안에서 옳다고 믿는다 — 단순한 악이 아니다.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FORMAT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -369,40 +470,22 @@ S#번호. INT./EXT. 장소 — 시간
 
 GENRE_RULES = {
     "범죄/스릴러": {
-        "en": "Crime / Thriller Series",
-        "core": "정보 비대칭과 압박 설계로 매 회 관객 불안을 지속시키는 장르.",
-        "engine": "사건 엔진 — 매 회 수사 진전 + 새로운 용의자/증거",
-        "season_q": "\"범인은 누구인가?\" 또는 \"주인공은 살아남는가?\"",
-        "opening": "사건의 결과부터 — 시체, 범죄 현장, 또는 사건의 여파를 먼저 보여주고 '어떻게?'로 끈다.",
-        "ep_pattern": "EP1:사건발생+수사시작 / EP4:1차용의자반전(진범아님) / EP7:진범정체공개 / EP8:최종대결+도덕적대가",
+        "en": "Crime / Thriller / Noir Series",
+        "core": "정보 비대칭과 압박, 도덕적 모호함 속 타락과 생존 대가.",
+        "engine": "사건 엔진 + 비밀 엔진 — 매 회 수사 진전, 용의자/증거, 동맹과 배신의 경계 이동",
+        "season_q": "\"범인은 누구인가?\" / \"주인공은 살아남는가?\" / \"주인공은 어디까지 타락하는가?\"",
+        "opening": "사건의 결과부터 — 시체/범죄 현장/파국을 먼저 보여주고 '어떻게?'로 끈다. 또는 끝에서 시작하는 느와르 내레이션.",
+        "ep_pattern": "EP1:사건발생+수사시작 / EP4:1차용의자반전+배신이중주 / EP6:도덕선붕괴 / EP7:진범정체공개 / EP8:최종대결+도덕적대가",
         "items": [
             "pressure_escalation", "information_asymmetry", "clock_or_deadline",
             "threat_visibility_control", "suspicion_transfer", "moral_compromise",
-            "false_safety", "reversal_pressure", "investigation_momentum", "dread_carry_over",
+            "betrayal_architecture", "paranoia_escalation", "dark_irony", "cost_of_survival",
         ],
-        "hooks": "시계가 돌아간다 / 누군가 지켜보고 있다 / 안전한 곳이 위험해진다",
-        "punches": "단서가 뒤집힌다 / 믿었던 인물이 의심 대상 / 시간이 줄어든다",
-        "cliffhangers": "새로운 증거/용의자/위협",
-        "fails": ["압박 약함", "단서 평면적", "반전 억지", "인물이 너무 쉽게 말함"],
-        "forbidden": "수사관의 독백으로 사건 정리, 우연의 단서 발견",
-    },
-    "느와르": {
-        "en": "Noir / Crime Noir Series",
-        "core": "도덕적 모호함 속 타락과 생존 대가를 보여주는 장르.",
-        "engine": "비밀 엔진 + 관계 엔진 — 매 회 동맹과 배신의 경계가 이동",
-        "season_q": "\"주인공은 어디까지 타락하는가?\" 또는 \"이 게임에서 살아남는 자는 누구인가?\"",
-        "opening": "끝에서 시작 — 주인공의 파국 직전/직후 또는 냉소적 내레이션. 관객은 '어떻게 여기까지 왔나'를 궁금해한다.",
-        "ep_pattern": "EP1:거래제안+일상균열 / EP4:배신이중주(누가적인가) / EP6:도덕선완전붕괴 / EP8:대가지불+아이러니결말",
-        "items": [
-            "moral_ambiguity", "fatalistic_inevitability", "power_corruption",
-            "betrayal_architecture", "paranoia_escalation", "dark_irony",
-            "visual_shadow_contrast", "voice_cynicism", "loyalty_test", "cost_of_survival",
-        ],
-        "hooks": "어둠 속 이미지 / 내레이션의 냉소적 한 줄 / 피할 수 없는 거래 제안",
-        "punches": "배신의 순간 / 도덕선을 넘는 선택 / 아이러니한 대가",
-        "cliffhangers": "동맹이 적에게 전화하는 장면 / 주인공이 선을 넘는 순간 / 이중 배신",
-        "fails": ["선악 명확", "배신 무게 부족", "분위기만 있고 서사 압력 없음", "타락 비납득"],
-        "forbidden": "도덕적 명확성, 권선징악 결말, 분위기만으로 채우는 씬",
+        "hooks": "시계가 돌아간다 / 누군가 지켜보고 있다 / 피할 수 없는 거래 제안",
+        "punches": "단서가 뒤집힌다 / 배신의 순간 / 도덕선을 넘는 선택 / 아이러니한 대가",
+        "cliffhangers": "새로운 증거/용의자/위협 / 이중 배신 / 주인공이 선을 넘는 순간",
+        "fails": ["압박 약함", "선악 명확", "분위기만 있고 서사 압력 없음", "반전 억지"],
+        "forbidden": "수사관의 독백으로 사건 정리, 우연의 단서 발견, 도덕적 명확성",
     },
     "드라마": {
         "en": "Drama Series",
@@ -643,6 +726,7 @@ def _format_inputs(inputs: dict) -> str:
 
 def build_season_arc_prompt(
     inputs: dict, num_episodes: int, duration: int, genre: str,
+    locked_block: str = "",
 ) -> str:
     gr = _genre_text(genre)
     season_beats = _format_season_beats(num_episodes)
@@ -650,6 +734,9 @@ def build_season_arc_prompt(
     target = EP_SCENE_TARGETS.get(duration, EP_SCENE_TARGETS[50])
 
     return f"""아래 기획 자료를 바탕으로 {num_episodes}부작 시리즈(에피소드당 {duration}분, {target['scenes']})의 **시즌 아크**를 설계하라.
+
+{LOCKED_SYSTEM_RULES if locked_block else ""}
+{locked_block}
 
 ══ 기획 자료 ══
 {_format_inputs(inputs)}
@@ -700,7 +787,14 @@ A/B/C/D 각 설명 + 비중
 ### 7. 에스컬레이션 곡선
 EP1 → EP{num_episodes} 판돈 상승 경로.
 
-### 8. 감정 연쇄 설계
+### 8. 서사동력 (Narrative Drive)
+- desire_origin: loss / lack
+- origin_detail: 구체적으로 무엇을 잃었는가 / 없었는가
+- arc_direction: 회복/복수/대체 또는 획득/성장/증명
+- goal_need_gap: Goal(외적 욕망)과 Need(내적 필요) 사이의 간극
+- 시리즈 전개: 이 간극이 에피소드마다 어떻게 드러나며, 시즌 피날레에서 어떻게 폭발하는가
+
+### 9. 감정 연쇄 설계
 시즌 전체의 감정 톤 흐름. EP1의 톤이 EP{num_episodes}의 카타르시스를 어떻게 결정하는가.
 
 한국어로, 시나리오 전문 작가의 언어로."""
@@ -712,6 +806,7 @@ EP1 → EP{num_episodes} 판돈 상승 경로.
 
 def build_extract_elements_prompt(
     inputs: dict, season_arc: str, genre: str,
+    locked_block: str = "",
 ) -> str:
     """기획 자료 + 시즌 아크에서 시나리오 집필에 필수적인 핵심 요소를 추출한다.
     이 결과는 매 비트 집필 시 강제 주입된다."""
@@ -766,6 +861,14 @@ def build_extract_elements_prompt(
 - EP2: ...
 - ...EP{8 if 'structure' in str(inputs) else 6}: ...
 
+===서사동력 (Narrative Drive)===
+- desire_origin: loss / lack
+- origin_detail: 구체적으로 무엇을 잃었는가 / 없었는가
+- arc_direction: 회복/복수/대체 또는 획득/성장/증명
+- resolution_strategy: 이 이야기만의 독특한 해결 방식
+- goal_need_gap: Goal과 Need 사이의 간극 — 이 간극이 시리즈를 끌고 간다
+(기획 자료의 GNS 또는 Core Build의 narrative_drive에서 추출)
+
 ===톤 하드 룰===
 - (톤 문서에서 추출한 절대 규칙들)
 
@@ -781,6 +884,7 @@ def build_episode_plan_prompt(
     inputs: dict, season_arc: str,
     ep_num: int, num_episodes: int, duration: int, genre: str,
     prev_episode_plan: str = "", prev_episode_last_scene: str = "",
+    locked_block: str = "",
 ) -> str:
     gr = _genre_text(genre)
     ep_beats = _format_episode_beats()
@@ -796,6 +900,9 @@ def build_episode_plan_prompt(
         )
 
     return f"""아래 시즌 아크와 기획 자료를 바탕으로 **EP{ep_num}의 씬 플랜**을 작성하라.
+
+{LOCKED_SYSTEM_RULES if locked_block else ""}
+{locked_block}
 
 ══ 기획 자료 (요약) ══
 {_format_inputs(inputs)}
@@ -880,7 +987,7 @@ def build_write_episode_beat_prompt(
     ep_num: int, beat_num: int,
     num_episodes: int, duration: int, genre: str,
     prev_beat_text: str = "", character_bible: str = "",
-    story_elements: str = "",
+    story_elements: str = "", locked_block: str = "",
 ) -> str:
     gr = _genre_text(genre)
     beat_info = EPISODE_BEATS[beat_num] if beat_num < len(EPISODE_BEATS) else EPISODE_BEATS[-1]
@@ -951,6 +1058,9 @@ def build_write_episode_beat_prompt(
     return f"""
 [TASK] EP{ep_num} Beat {beat_num} 시나리오 집필 — {beat_info['name']}
 {beat_info['role']}
+
+{LOCKED_SYSTEM_RULES if locked_block else ""}
+{locked_block}
 
 이 비트에 해당하는 모든 씬을 한국 표준 시나리오 서식으로 집필하라.
 
@@ -1075,6 +1185,11 @@ def build_write_episode_beat_prompt(
 15. 감정 연쇄 — 3% 법칙. 이 씬의 감정 톤이 다음 씬의 전제.
 16. Intention & Obstacle — 매 씬에서 "누가 뭘 원하고, 뭐가 막는가" 명확히.
 17. Nonsense Filter — 목적 없는 장면, 시즌 아크 무관 가지치기 금지.
+18. 빌런 추적 — 이 비트에서 적대자가 뭘 했는가? 직접 등장 안 해도 영향이 느껴져야 한다.
+    ★ 클라이맥스 전까지 적대자가 계속 이기고 있어야 한다. 빌런이 매번 실패하면 긴장감 사라진다. ★
+19. LOCKED 검증 — 출력 완료 후 LOCKED 항목 준수 여부 자가 검증. 위반 시 원본으로 되돌려라.
+20. 서사동력 검증 — 이 비트에서 주인공의 행동이 desire_origin(loss/lack)과 arc_direction에 일치하는가?
+    Goal을 추구하면서 Need와의 간극이 드러나는가? 서사동력과 어긋나는 행동은 캐릭터 일관성의 붕괴다.
 
 [OUTPUT]
 맨 위에 헤더:
@@ -1093,6 +1208,9 @@ EP{ep_num} — Beat {beat_num}. {beat_info['name']}
 - B-Story 진행: 이 비트에서 B-Story 시간축이 어떻게 전진했는가
 - 관객 심리: 현재 유지 중인 열린 질문 / Dramatic Irony
 - 비밀 경제: 이 비트에서의 비밀 상태
+- 빌런 추적: 이 비트에서 적대자가 한 구체적 행동 + 승/패 (빌런이 이겼는가?)
+- LOCKED 검증: LOCKED 항목 준수 여부 — 'OK' 또는 위반 항목 명시
+- 서사동력 추적: 이 비트에서 주인공의 행동이 desire_origin/arc_direction과 일치하는가? Goal↔Need 간극 진전도.
 - 보이스 점검: 각 인물의 speech_pattern 준수 여부 + sample_lines 톤 일치 여부
 """.strip()
 
@@ -1104,6 +1222,7 @@ EP{ep_num} — Beat {beat_num}. {beat_info['name']}
 def build_rewrite_prompt(
     beat_text: str, instruction: str,
     genre: str = "", character_bible: str = "",
+    locked_block: str = "",
 ) -> str:
     gr = _genre_text(genre)
     char_block = character_bible[:3000] if character_bible else ""
@@ -1111,6 +1230,9 @@ def build_rewrite_prompt(
 
     return f"""
 [TASK] 비트 다시 쓰기 — {user_inst}
+
+{LOCKED_SYSTEM_RULES if locked_block else ""}
+{locked_block}
 
 [장르]
 {gr}
