@@ -22,6 +22,7 @@ from prompt import (
     build_episode_plan_prompt,
     build_write_episode_beat_prompt,
     build_rewrite_prompt,
+    build_structural_rewrite_prompt,
 )
 
 # ──────────────────────────────────────────────
@@ -695,6 +696,208 @@ def build_docx_download(text: str, filename: str, title: str = ""):
 
 
 # ══════════════════════════════════════════════
+
+# ──────────────────────────────────────────────
+# 모드 선택 (집필 / 리라이트)
+# ──────────────────────────────────────────────
+mode = st.radio(
+    "모드",
+    ["✍️ 집필", "🔄 리라이트"],
+    horizontal=True,
+    help="집필: 시즌 아크 → 씬 플랜 → 비트 집필 | 리라이트: 기존 비트를 프로듀서 노트·캐스팅 반영하여 구조적 재작성",
+)
+
+# ══════════════════════════════════════════════
+# 🔄 리라이트 모드 (독립형 — 세션 비의존)
+# ══════════════════════════════════════════════
+if mode == "🔄 리라이트":
+    st.markdown(
+        '<div class="section-header">🔄 구조적 리라이트 <span class="en">STRUCTURAL REWRITE · NETFLIX MODE</span></div>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "기존 대본 + 기획서 + 프로듀서/캐스팅/모니터링 노트를 붙여넣어 구조적으로 재작성합니다. "
+        "집필 모드와 독립적으로 작동합니다."
+    )
+
+    # ── ① 기획서 (Creator Engine 산출물) ──
+    st.markdown(
+        '<div class="section-header">📋 기획서 <span class="en">CREATOR ENGINE OUTPUT</span></div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("Creator Engine에서 완성한 기획서를 붙여넣으세요. 없는 항목은 비워도 됩니다.")
+
+    with st.expander("📝 기획서 붙여넣기", expanded=True):
+        rw_logline = st.text_area("로그라인", height=80, placeholder="Logline Pack", key="rw_logline")
+        rw_gns = st.text_area("GNS + 서사동력", height=100, placeholder="Goal/Need/Strategy + narrative_drive", key="rw_gns")
+        rw_characters = st.text_area("캐릭터 + 바이블", height=180, placeholder="characters + extended_characters + Bible (tactics·secret·speech_pattern)", key="rw_characters")
+        col_rw_a, col_rw_b = st.columns(2)
+        with col_rw_a:
+            rw_world = st.text_area("세계관", height=100, placeholder="World Building", key="rw_world")
+        with col_rw_b:
+            rw_tone = st.text_area("톤 문서", height=100, placeholder="Tone Document", key="rw_tone")
+
+    # ── ② 기존 대본 ──
+    st.markdown(
+        '<div class="section-header">📖 기존 대본 <span class="en">EXISTING SCRIPT</span></div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("리라이트할 에피소드의 대본을 붙여넣으세요. 시즌 아크와 씬 플랜도 있으면 결과가 훨씬 좋습니다.")
+
+    rw_genre = st.selectbox("장르", list(GENRE_RULES.keys()), key="rw_genre")
+
+    col_ep, col_bt = st.columns(2)
+    with col_ep:
+        rw_ep_num = st.number_input("에피소드 번호", min_value=1, max_value=12, value=1, key="rw_ep_num")
+    with col_bt:
+        rw_beat_num = st.selectbox(
+            "비트 번호",
+            list(range(8)),
+            format_func=lambda x: f"Beat {x} — {EPISODE_BEATS[x]['name']}" if x < len(EPISODE_BEATS) else f"Beat {x}",
+            key="rw_beat_num",
+        )
+
+    rw_beat_text = st.text_area(
+        f"EP{rw_ep_num} Beat {rw_beat_num} 기존 대본",
+        height=300,
+        placeholder="리라이트할 비트의 시나리오 텍스트를 여기에 붙여넣으세요.",
+        key="rw_beat_text",
+    )
+
+    with st.expander("📑 시즌 아크 · 씬 플랜 (선택사항 — 있으면 품질 ↑)", expanded=False):
+        rw_season_arc = st.text_area("시즌 아크", height=150, placeholder="시즌 아크 설계 텍스트 (없으면 비워두세요)", key="rw_season_arc")
+        rw_episode_plan = st.text_area(f"EP{rw_ep_num} 씬 플랜", height=150, placeholder="해당 에피소드의 씬 플랜 (없으면 비워두세요)", key="rw_ep_plan")
+
+    # ── ③ 후속 에피소드 (연속성 유지용) ──
+    with st.expander("📌 후속 에피소드 텍스트 (연속성 유지용 — 선택사항)", expanded=False):
+        st.caption(
+            "리라이트 대상 이후의 에피소드(EP5~8 등) 텍스트를 붙여넣으면 "
+            "리라이트가 후속 에피소드와 모순되지 않도록 검증합니다."
+        )
+        rw_subsequent = st.text_area(
+            "후속 에피소드 텍스트",
+            height=200,
+            placeholder="EP5~EP8의 대본 텍스트 (요약도 가능)",
+            key="rw_subsequent",
+        )
+
+    # ── ④ LOCKED / OPEN ──
+    with st.expander("🔒 설정 잠금 (LOCKED / OPEN)", expanded=False):
+        col_rl, col_ro = st.columns(2)
+        with col_rl:
+            rw_locked = st.text_area(
+                "🔒 LOCKED (변경 불가)", height=120,
+                placeholder="서재중: 29세, 묘적사 현장 요원\n기획의도: 20대 취업난이 입사 동기에 반영",
+                key="rw_locked",
+            )
+        with col_ro:
+            rw_open = st.text_area(
+                "🟢 OPEN (창작 가능)", height=120,
+                placeholder="캐릭터 외형, 말투 디테일\n장면별 연출",
+                key="rw_open",
+            )
+
+    rw_locked_items = [l.strip() for l in rw_locked.strip().split("\n") if l.strip()] if rw_locked.strip() else []
+    rw_open_items = [l.strip() for l in rw_open.strip().split("\n") if l.strip()] if rw_open.strip() else []
+    rw_locked_block = build_locked_block(rw_locked_items, rw_open_items) if rw_locked_items or rw_open_items else ""
+
+    # ── ⑤ 리라이트 노트 ──
+    st.markdown(
+        '<div class="section-header">📝 리라이트 노트 <span class="en">REWRITE NOTES</span></div>',
+        unsafe_allow_html=True,
+    )
+
+    producer_notes = st.text_area(
+        "🎬 프로듀서 / 넷플릭스 노트",
+        height=150,
+        placeholder=(
+            "예:\n"
+            "- EP1 오프닝이 너무 느리다. 3분 안에 사건으로.\n"
+            "- 재중의 감정 변화가 급격하다. EP2까지 서서히.\n"
+            "- B-Story 대선 카운트다운이 더 눈에 보여야."
+        ),
+        key="rw_producer",
+    )
+
+    col_n1, col_n2 = st.columns(2)
+    with col_n1:
+        casting_notes = st.text_area(
+            "🎭 캐스팅 노트", height=120,
+            placeholder="서재중 역: ○○○ 확정. 절제된 연기.\n최이호 역: △△△. 카리스마+유머.",
+            key="rw_casting",
+        )
+    with col_n2:
+        monitoring_notes = st.text_area(
+            "📋 모니터링 / 내부 리뷰", height=120,
+            placeholder="S#5 심문 씬이 가장 강하다. 유지.\nS#8~10 늘어진다. 압축 필요.",
+            key="rw_monitoring",
+        )
+
+    # ── ⑥ 실행 ──
+    has_text = bool(rw_beat_text.strip())
+    has_notes = any([producer_notes.strip(), casting_notes.strip(), monitoring_notes.strip()])
+
+    if not has_text:
+        st.info("리라이트할 기존 대본 텍스트를 붙여넣으세요.")
+    elif not has_notes:
+        st.info("프로듀서 노트, 캐스팅 노트, 모니터링 의견 중 하나 이상을 입력하세요.")
+
+    if st.button(
+        f"🔄 EP{rw_ep_num} Beat {rw_beat_num} 구조적 리라이트 실행",
+        type="primary",
+        use_container_width=True,
+        disabled=not (has_text and has_notes),
+    ):
+        prompt = build_structural_rewrite_prompt(
+            beat_text=rw_beat_text,
+            ep_num=rw_ep_num,
+            beat_num=rw_beat_num,
+            season_arc=rw_season_arc,
+            episode_plan=rw_episode_plan,
+            genre=rw_genre,
+            character_bible=rw_characters,
+            producer_notes=producer_notes,
+            casting_notes=casting_notes,
+            monitoring_notes=monitoring_notes,
+            subsequent_eps_context=rw_subsequent,
+            locked_block=rw_locked_block,
+        )
+        with st.spinner(f"EP{rw_ep_num} Beat {rw_beat_num}을 구조적으로 리라이트하고 있습니다..."):
+            result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_BEAT)
+
+        # 결과를 세션에 저장 (다운로드용)
+        if "rw_results" not in st.session_state:
+            st.session_state["rw_results"] = {}
+        st.session_state["rw_results"][f"EP{rw_ep_num}_Beat{rw_beat_num}"] = result
+        st.rerun()
+
+    # ── 리라이트 결과 표시 + 다운로드 ──
+    rw_results = st.session_state.get("rw_results", {})
+    if rw_results:
+        st.markdown("---")
+        st.markdown(
+            '<div class="section-header">📥 리라이트 결과 <span class="en">REWRITE RESULTS</span></div>',
+            unsafe_allow_html=True,
+        )
+        timestamp = datetime.now().strftime("%Y%m%d")
+        for label, text in rw_results.items():
+            with st.expander(f"✅ {label}", expanded=False):
+                st.markdown(text[:5000] + ("..." if len(text) > 5000 else ""))
+            build_txt_download(text, f"{label}_rewrite_{timestamp}.txt")
+
+        if st.button("🗑️ 리라이트 결과 초기화"):
+            st.session_state["rw_results"] = {}
+            st.rerun()
+
+    st.markdown("---")
+    st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.6")
+    st.stop()
+
+
+# ══════════════════════════════════════════════
+# ✍️ 집필 모드 (아래부터 기존 파이프라인)
+# ══════════════════════════════════════════════
+
 # STEP 1: 자료 입력
 # ══════════════════════════════════════════════
 
