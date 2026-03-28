@@ -1260,3 +1260,125 @@ def build_rewrite_prompt(
 [OUTPUT]
 개선된 시나리오 전문. 마지막에 --- 후 변경 요약 3줄.
 """.strip()
+
+
+# ═══════════════════════════════════════════════════════════
+# 5. 구조적 리라이트 (넷플릭스 리라이트 모드)
+# ═══════════════════════════════════════════════════════════
+
+def build_structural_rewrite_prompt(
+    beat_text: str,
+    ep_num: int, beat_num: int,
+    season_arc: str, episode_plan: str,
+    genre: str,
+    character_bible: str = "",
+    # ── 리라이트 전용 입력 ──
+    producer_notes: str = "",
+    casting_notes: str = "",
+    monitoring_notes: str = "",
+    subsequent_eps_context: str = "",
+    locked_block: str = "",
+) -> str:
+    """넷플릭스 스타일 구조적 리라이트.
+    프로듀서 노트, 캐스팅 변경, 모니터링 의견을 반영하면서
+    후속 에피소드(EP5~8)와의 연속성을 유지한다."""
+
+    gr = _genre_text(genre)
+    beat_info = EPISODE_BEATS[beat_num] if beat_num < len(EPISODE_BEATS) else EPISODE_BEATS[-1]
+    char_block = character_bible[:4000] if character_bible else ""
+
+    notes_block = ""
+    if producer_notes:
+        notes_block += f"""
+[🎬 프로듀서 / 넷플릭스 노트 — 최우선 반영]
+{producer_notes}
+→ 이 노트의 모든 지적 사항을 반영하라. 빠뜨린 항목이 있으면 실패다.
+"""
+    if casting_notes:
+        notes_block += f"""
+[🎭 캐스팅 노트 — 배우 톤 반영]
+{casting_notes}
+→ 캐스팅이 확정된 캐릭터의 대사 톤, 말투, 에너지를 해당 배우에 맞게 조정하라.
+→ 캐릭터 바이블의 speech_pattern과 sample_lines를 캐스팅 노트 기준으로 업데이트하여 반영.
+→ 배우의 강점(예: 절제된 연기, 폭발적 감정, 코믹 타이밍)을 활용하는 씬을 강화하라.
+"""
+    if monitoring_notes:
+        notes_block += f"""
+[📋 모니터링 / 내부 리뷰 의견]
+{monitoring_notes}
+→ 모니터링에서 지적된 약점을 보강하고, 강점으로 지적된 부분은 유지·강화하라.
+"""
+
+    subsequent_block = ""
+    if subsequent_eps_context:
+        subsequent_block = f"""
+[⚠️ 후속 에피소드 컨텍스트 — 연속성 필수 유지]
+{subsequent_eps_context}
+→ 이 리라이트가 위의 후속 에피소드들과 모순되면 안 된다.
+→ 후속 에피소드에서 참조하는 사건·대사·관계·비밀이 이 비트에서 깨지면 안 된다.
+→ 리라이트로 변경된 사항이 후속 에피소드에 영향을 미치면, 마지막에 [연속성 영향 분석]에서 명시하라.
+"""
+
+    return f"""
+[TASK] 구조적 리라이트 — EP{ep_num} Beat {beat_num} [{beat_info['name']}]
+
+이것은 넷플릭스 스타일 구조적 리라이트다.
+기존 초고를 프로듀서 노트, 캐스팅 변경, 모니터링 의견을 반영하여 다시 쓴다.
+단순 문장력 개선이 아니라 구조·캐릭터·플롯 레벨의 수정이다.
+
+{LOCKED_SYSTEM_RULES if locked_block else ""}
+{locked_block}
+
+{notes_block}
+
+[장르]
+{gr}
+
+[시즌 아크 (요약)]
+{season_arc[:2000]}
+
+[EP{ep_num} 씬 플랜]
+{episode_plan[:3000]}
+
+{f"[캐릭터 바이블]{chr(10)}{char_block}" if char_block else ""}
+
+{subsequent_block}
+
+[기존 텍스트 — 이것을 리라이트하라]
+{beat_text}
+
+[RULES — 구조적 리라이트 원칙]
+1. 프로듀서/넷플릭스 노트가 최우선. 노트의 모든 지적을 반영하라.
+2. 캐스팅이 바뀐 캐릭터의 대사 톤·에너지·말투를 새 배우에 맞게 조정.
+3. 강점 유지: 기존 텍스트에서 잘 작동하는 씬·대사·이미지는 보존하라.
+4. 약점 개선: 노트에서 지적된 부분을 근본적으로 재구성하라 (단순 패치 금지).
+5. 연속성: 리라이트된 내용이 후속 에피소드의 사건·관계·비밀과 모순되면 안 된다.
+6. SCOPE 유지: 리라이트 후에도 비트 안에 최소 5개 독립 씬, 2개+ 장소, 시간 경과 필수.
+7. B-Story 유지: B-Story 씬이 삭제되면 안 된다. 노트에서 B-Story 변경을 요구하면 반영.
+8. 클리프행어 유지: Beat 7이면 클리프행어가 반드시 있어야 한다. 변경은 가능하지만 삭제는 안 된다.
+9. 분량: 기존과 동등하거나 더 많아야 한다. 리라이트로 분량이 줄면 안 된다.
+10. LOCKED 검증: 리라이트에서도 LOCKED 항목은 변경 불가.
+
+[OUTPUT]
+맨 위에 헤더:
+
+═══════════════════════════════════════
+🔄 REWRITE — EP{ep_num} Beat {beat_num}. {beat_info['name']}
+═══════════════════════════════════════
+
+리라이트된 시나리오 전문.
+
+마지막에 --- 후:
+[변경 요약]
+- 프로듀서 노트 반영 사항: (항목별 체크)
+- 캐스팅 반영 사항: (변경된 캐릭터별 톤 변화)
+- 구조적 변경: (씬 추가/삭제/재배치 목록)
+- 유지된 강점: (보존한 씬/대사/이미지)
+
+[연속성 영향 분석]
+- 이 리라이트가 후속 에피소드에 미치는 영향: (있으면 명시, 없으면 "영향 없음")
+- 후속 에피소드에서 수정이 필요한 부분: (있으면 EP번호 + 내용, 없으면 "없음")
+
+[LOCKED 검증]
+- LOCKED 항목 준수 여부: OK 또는 위반 항목
+""".strip()
