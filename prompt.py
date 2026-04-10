@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────────
-# BLUE JEANS SERIES ENGINE v1.6
-# prompt.py — Full Version (Creator Engine v1.5 통합)
+# BLUE JEANS SERIES ENGINE v1.7
+# prompt.py — Full Version (Creator Engine v1.9 + Writer Engine v2.2 동기화)
 # © 2026 BLUE JEANS PICTURES
 # ─────────────────────────────────────────────────────────────
 
@@ -257,6 +257,8 @@ ACTION LINE (지문)
 - 행동의 모든 단계를 나열하는 것
 - 감정을 지문으로 설명하는 것 ("그는 불안해하며")
 - 카메라가 볼 수 없는 정보 ("그는 어젯밤 일을 떠올리며")
+- ★ em dash(—) 사용 금지. 쉼표(,)나 마침표(.)로 끊어라. (씬 헤딩만 예외)
+- ★ **볼드 마크다운** 사용 금지. 시나리오는 plain text다.
 
 [좋은 지문]
 "싱크대 앞의 지훈. 손을 문지른다 — 손금 사이 진흙이 지워지지 않는다. 수압을 올린다. 물소리가 주방을 채운다."
@@ -286,6 +288,13 @@ Dialogue = Music:
 대사 목적 (최소 하나):
 seduction / evasion / interrogation / intimidation / masking_pain /
 status_play / manipulation / confession_resisted / comic_misdirection / emotional_deflection
+
+대사 내 em dash(—) 금지:
+- 대사에서 끊어야 하면 마침표, 쉼표, 또는 말줄임표(...)를 써라.
+
+[대사 형식 — 반드시 준수]
+1. 같은 캐릭터의 연속 대사 금지: 하나의 대사 블록 안에서 줄바꿈으로 이어 쓴다.
+2. 같은 캐릭터명이 2회 연속 등장하면 안 된다.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EMOTIONAL CHAIN (감정 연쇄 법칙)
@@ -351,6 +360,24 @@ EMOTIONAL CHAIN (감정 연쇄 법칙)
 - 패턴 없이 무작위 사건만 나열 → 관객이 예측을 포기하고 이탈
 - 관객이 아무것도 모른 채 20분 → 혼란, 즉시 이탈
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+AI SCREENPLAY ESCAPE — AI가 반복하는 10가지 실수 (v1.7 신규)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+★ 아래 10개 패턴이 출력에 보이면 즉시 다시 써라. ★
+
+[A1. 감정 설명 지문] ❌ "불안한 마음으로 문 앞에 선다" ✅ "손잡이를 잡았다 놓았다 한다. 손등에 땀."
+[A2. 모든 캐릭터 같은 말투] ❌ 전부 같은 구조 ✅ 침묵/회피/공격 — 전술이 캐릭터
+[A3. 방금 본 것을 대사로 반복] ❌ "이건... 서류야" ✅ 서류를 펼친다. 손이 멈춘다. 상대를 본다.
+[A4. 무대 연출 지문] ❌ "돌아서서 그녀의 눈을 바라보며 말한다" ✅ "지훈이 수현을 본다."
+[A5. 편의적 정보 전달 대사] ❌ "네가 알다시피..." ✅ 제3자의 말을 빌려라.
+[A6. 침묵이 없다] 대사가 없는 30초가 대사 10줄보다 강할 때가 있다.
+[A7. 대사 길이가 대칭] ❌ A 3문장→B 3문장→A 3문장 ✅ 비대칭. 밀어붙이고 물러난다.
+[A8. 씬의 처음부터 시작] ❌ 도착 과정 서술 ✅ 이미 진행 중인 상황에 떨어뜨려라 (Drop in the Middle).
+[A9. 긴장이 같은 씬에서 해소] ❌ 위기→같은 씬 해결 ✅ 긴장을 씬 경계 너머로 끌고 가라.
+[A10. 총칭적 감각 묘사] ❌ "바람이 불었다" ✅ "창문 틈으로 커튼이 빨려 들어간다."
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 NONSENSE FILTER
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -430,6 +457,25 @@ Creator Engine 산출물의 narrative_drive 필드를 반드시 참조하라:
 서사동력과 어긋나는 행동은 캐릭터 일관성의 붕괴다.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Planting & Payoff 시리즈 시스템 (v1.7 신규)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+시리즈에서 Plant-Payoff는 영화보다 강력하다. EP1에 심은 것이 EP7에서 회수될 때 관객은 '아!' 한다.
+
+[Plant-Payoff 3종]
+① 캐릭터 Plant: 주인공의 습관/대사/소품 → 시즌 후반에서 반전 의미
+② 관계 Plant: 인물 간 사소한 상호작용 → 결정적 순간에 신뢰/배신의 근거
+③ 세계관 Plant: 세계의 규칙/장소/사물 → 해결의 열쇠 또는 비극의 원인
+
+[시리즈 Plant-Payoff 규칙]
+- 시즌 전체에 최소 6개 Plant-Payoff 쌍이 있어야 한다.
+- EP1~2에 심고, EP5~8에서 회수하는 장기 Plant가 최소 3개.
+- 에피소드 내 단기 Plant-Payoff도 매 에피소드 1~2개.
+- 회수되지 않는 Plant는 관객의 무의식에 미해결로 남아 불만족을 만든다.
+- Plant 없이 등장하는 Payoff는 데우스 엑스 마키나다. 금지.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
 LOCKED SYSTEM
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -439,14 +485,30 @@ LOCKED SYSTEM
 매 출력 시 LOCKED 준수 여부를 자가 검증하라.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
-적대자(VILLAIN) 추적
+Villain 4 Questions + 적대자 추적 (Creator Engine v1.9 통합)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-★ 클라이맥스 전까지 적대자가 계속 이기고 있어야 한다. ★
-빌런이 매번 실패하면 긴장감이 사라진다.
-매 비트에서 적대자가 구체적으로 무엇을 했는가 + 승/패를 추적하라.
-적대자가 직접 등장하지 않아도 그의 영향이 느껴져야 한다.
-빌런은 자신만의 논리 안에서 옳다고 믿는다 — 단순한 악이 아니다.
+빌런이 나쁜 이유가 '원래 나쁜 사람이라서'이면 실패다.
+
+① 흥미로운가?
+- 빌런도 자신만의 논리 안에서 옳다고 믿어야 한다.
+- 관객이 빌런에게 분노하면서도 이해하는 순간이 반드시 있어야 한다.
+- 가능하면: 구조(사회/시스템/환경)가 빌런을 만들었다는 것을 보여라.
+
+② 주인공의 다크 미러인가?
+- '주인공이 다른 선택을 했다면 이 사람이 된다.'
+- 적대자의 존재가 주인공의 변화를 촉발하는가?
+
+③ 등장 시 주인공의 계획을 뒤엎는가?
+- 적대자가 등장하면 플롯이 바뀌어야 한다. 단순 위협이 아니라 계획 파괴.
+
+④ 빌런의 승률 설계 (가장 중요)
+- 적대자가 거의 모든 대결에서 이겨야 한다. 주인공이 마지막에만 이긴다.
+- EP1~3: 적대자 주도. EP4~6: 적대자 압도. EP7: 최고조 → EP8: 주인공 역전.
+- Patriot Games 규칙: 빌런이 매번 실패하면 클라이맥스에서 아무도 긴장하지 않는다.
+
+★ 매 비트에서 적대자가 구체적으로 무엇을 했는가 + 승/패를 추적하라.
+  적대자가 직접 등장하지 않아도 그의 영향이 느껴져야 한다.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FORMAT
@@ -595,40 +657,66 @@ GENRE_RULES = {
         "fails": ["고백만 많고 축적 없음", "끌림 이유 불명", "감정 온도 단조"],
         "forbidden": "오해가 대화 한 마디로 해결, 삼각관계 기계적 반복",
     },
+    "미스터리": {
+        "en": "Mystery Series",
+        "core": "진실에 대한 탐색이 인물과 세계를 변화시키는 장르.",
+        "engine": "비밀 엔진 — 매 회 퍼즐 조각이 하나씩 맞춰지며 더 큰 미스터리가 열림",
+        "season_q": "\"진실은 무엇인가?\" / \"누가 거짓말을 하고 있는가?\"",
+        "opening": "불가능한 상황 — 설명할 수 없는 사건/실종/발견으로 시작.",
+        "ep_pattern": "EP1:미스터리제시 / EP4:첫번째해답→더큰미스터리 / EP7:전부연결 / EP8:진실의대가",
+        "items": [
+            "puzzle_design", "clue_pacing", "red_herring",
+            "revelation_timing", "unreliable_narrator", "perspective_shift",
+            "fair_play_rule", "escalating_stakes", "connection_discovery", "truth_cost",
+        ],
+        "hooks": "이 단서는 무엇을 의미하는가 / 누군가 거짓말을 하고 있다",
+        "punches": "모든 단서가 연결되는 순간 / 믿었던 사람이 용의자가 되는 순간",
+        "cliffhangers": "새로운 모순 / 증거 조작 발견 / 핵심 증인의 실종",
+        "fails": ["단서가 불공정", "해답이 억지", "탐색 과정이 지루", "진실에 대가 없음"],
+        "forbidden": "관객이 추론 불가능한 반전, 우연의 단서 발견, 범인의 자백으로만 해결",
+    },
 }
 
 
 def _genre_text(genre: str) -> str:
-    """장르 Rule Pack → 프롬프트용 텍스트 (구체적 작동 지시 포함)."""
+    """장르 Rule Pack → 프롬프트용 텍스트 (12필드 완전 반영)."""
     r = GENRE_RULES.get(genre)
     if not r:
         return f"[장르: {genre}] — 범용 장르 규칙 적용."
 
     items_detail = "\n".join(f"  - {item}" for item in r["items"])
 
+    must_have_detail = "\n".join(f"  - {m}" for m in r.get("must_have", []))
+
     return (
         f"[GENRE RULE: {genre} ({r['en']})]\n"
         f"\n"
         f"핵심 원칙: {r['core']}\n"
-        f"시리즈 엔진: {r['engine']}\n"
-        f"시즌 질문: {r['season_q']}\n"
-        f"오프닝 전략: {r['opening']}\n"
-        f"에피소드 패턴: {r['ep_pattern']}\n"
+        f"시리즈 엔진: {r.get('engine', '')}\n"
+        f"시즌 질문: {r.get('season_q', '')}\n"
+        f"오프닝 전략: {r.get('opening', '')}\n"
+        f"에피소드 패턴: {r.get('ep_pattern', '')}\n"
         f"\n"
-        f"장르 필수 장치 (10개):\n"
+        f"[장르 필수 구조]\n"
+        f"{must_have_detail}\n"
+        f"\n"
+        f"[장르 필수 장치 (10개)]\n"
         f"{items_detail}\n"
         f"\n"
         f"[장르 작동 규칙]\n"
         f"- 매 씬에서 위 10개 장치 중 최소 2개가 반드시 작동해야 한다.\n"
         f"- 비트 전체에서 10개 중 최소 5개 이상이 등장해야 한다.\n"
+        f"- {r.get('hook_rule', '')}\n"
+        f"- {r.get('punch_rule', '')}\n"
+        f"- 필수 셋피스: {r.get('setpiece', '')}\n"
         f"- 장르 장치가 작동하지 않는 씬은 존재 이유가 없다.\n"
         f"\n"
         f"Hook (씬 시작): {r['hooks']}\n"
         f"Punch (씬 끝): {r['punches']}\n"
-        f"클리프행어: {r['cliffhangers']}\n"
+        f"클리프행어: {r.get('cliffhangers', '')}\n"
         f"\n"
         f"실패 신호: {' / '.join(r['fails'])}\n"
-        f"금지: {r['forbidden']}"
+        f"금지: {r.get('forbidden', '')}"
     )
 
 
@@ -677,6 +765,16 @@ CLIFFHANGER_TYPES = [
     {"type": "Question",    "desc": "대답할 수 없는 질문"},
 ]
 
+# v1.7 신규: 비트 구조 변주 6유형
+BEAT_STRUCTURE_TYPES = [
+    {"code": "INV", "name": "조사/발견형", "desc": "단서 수집, 정보 조각, 진실에 접근"},
+    {"code": "CON", "name": "대결/충돌형", "desc": "직접 대면, 언쟁, 물리적 충돌, 갈등 폭발"},
+    {"code": "REV", "name": "반전/배신형", "desc": "예상 뒤집기, 동맹 붕괴, 새로운 진실"},
+    {"code": "EMO", "name": "감정/관계형", "desc": "감정 씬 중심, 관계 변화, 고백, 결별"},
+    {"code": "ACT", "name": "행동/추격형", "desc": "물리적 행동, 시간 압박, 도주, 구출"},
+    {"code": "SIL", "name": "정적/결심형", "desc": "침묵, 내면, 결심의 순간, 폭풍 전 고요"},
+]
+
 
 # ═══════════════════════════════════════════════════════════
 # 에피소드 분량 기준
@@ -718,6 +816,21 @@ def _format_inputs(inputs: dict) -> str:
         if val:
             parts.append(f"[{label}]\n{val}")
     return "\n\n".join(parts)
+
+
+def summarize_episode_context(episode_beats: dict, ep: int) -> str:
+    """v1.7: 컨텍스트 오버플로 대응 — 완료된 에피소드의 핵심만 추출."""
+    parts = []
+    for b in range(8):
+        key = f"{ep}_{b}"
+        if key in episode_beats:
+            text = episode_beats[key]
+            if "---" in text:
+                memo = text.split("---", 1)[1][:800]
+                parts.append(f"Beat {b} 메모: {memo.strip()}")
+            else:
+                parts.append(f"Beat {b}: {text[:200]}...")
+    return "\n".join(parts) if parts else ""
 
 
 # ═══════════════════════════════════════════════════════════
@@ -795,13 +908,101 @@ EP1 → EP{num_episodes} 판돈 상승 경로.
 - 시리즈 전개: 이 간극이 에피소드마다 어떻게 드러나며, 시즌 피날레에서 어떻게 폭발하는가
 
 ### 9. 감정 연쇄 설계
-시즌 전체의 감정 톤 흐름. EP1의 톤이 EP{num_episodes}의 카타르시스를 어떻게 결정하는가.
+시즌 전체의 감정 톤 흐름.
+
+### 10. Plant-Payoff 시리즈 맵
+최소 6개 Plant-Payoff 쌍 (캐릭터/관계/세계관 각 2개 이상):
+- Plant 1: [내용] — EP? Beat ? → Payoff: EP? Beat ? — [회수 방식]
+
+### 11. 캐릭터 부족 진단
+- 부족한 역할 (B-Story 전용 인물, 에피소드 게스트, 와일드카드)
+- 추천 추가 인물 2~3명 (역할명 + 간략 설명)
 
 한국어로, 시나리오 전문 작가의 언어로."""
 
 
+
+
 # ═══════════════════════════════════════════════════════════
-# 1.5. 핵심 요소 추출 (Story Elements Extraction)
+# 1.5a. 시리즈 캐릭터 확장 (v1.7 신규)
+# ═══════════════════════════════════════════════════════════
+
+def build_character_expansion_prompt(
+    inputs: dict, season_arc: str, genre: str,
+    num_episodes: int, locked_block: str = "",
+) -> str:
+    """시즌 아크를 분석하여 부족한 캐릭터를 생성한다."""
+    gr = _genre_text(genre)
+    char_input = inputs.get("characters", "")[:3000]
+
+    return f"""[TASK] 시리즈 캐릭터 확장
+
+시즌 아크를 분석하여, {num_episodes}부작에 필요하지만 현재 없는 인물을 설계하라.
+
+{LOCKED_SYSTEM_RULES if locked_block else ""}
+{locked_block}
+
+[현재 캐릭터]
+{char_input}
+
+[시즌 아크]
+{season_arc[:4000]}
+
+[장르]
+{gr}
+
+[분석] B/C/D 스토리라인 전용 인물, 비밀 보유자, 에피소드 게스트, 와일드카드, 기능적 조연.
+
+[출력 — 인물별 간이 바이블]
+이름/나이/직업 / 역할 / 관계 / goal / secret / tactics(2가지) / speech_pattern(2개) / sample_lines / 등장EP / 서사 기능.
+
+마지막에: 기존 인물 역할 확장 제안 + 기능적 조연 3명(이름+직함+한줄묘사+등장EP+기능).
+
+한국어, 시나리오 전문 작가의 언어로.""".strip()
+
+
+# ═══════════════════════════════════════════════════════════
+# 1.5b. 시리즈 사건 보강 (v1.7 신규)
+# ═══════════════════════════════════════════════════════════
+
+def build_event_expansion_prompt(
+    inputs: dict, season_arc: str, genre: str,
+    num_episodes: int, locked_block: str = "",
+) -> str:
+    """시즌 아크와 기존 트리트먼트를 대조하여 부족한 사건을 보강한다."""
+    gr = _genre_text(genre)
+    structure = inputs.get("structure", "")[:3000]
+    treatment = inputs.get("treatment", "")[:3000]
+
+    return f"""[TASK] 시리즈 사건 보강
+
+{num_episodes}부작 64비트를 채우기에 부족한 사건을 보강하라.
+
+{LOCKED_SYSTEM_RULES if locked_block else ""}
+{locked_block}
+
+[시즌 아크]
+{season_arc[:4000]}
+
+[기존 구조]
+{structure or "(없음)"}
+
+[기존 트리트먼트]
+{treatment or "(없음)"}
+
+[장르]
+{gr}
+
+[출력]
+### 빈 구간 분석 (EP별 기존/부족 대조)
+### 보강 사건 목록 (EP, Beat, 사건명, 설명, 캐릭터, 장르 장치)
+### B-Story 사건 보강
+### 에스컬레이션 구체화 (추상→구체)
+
+한국어, 시나리오 전문 작가의 언어로.""".strip()
+
+# ═══════════════════════════════════════════════════════════
+# 1.5c. 핵심 요소 추출 + Plant-Payoff 맵 (Story Elements Extraction)
 # ═══════════════════════════════════════════════════════════
 
 def build_extract_elements_prompt(
@@ -871,6 +1072,13 @@ def build_extract_elements_prompt(
 
 ===톤 하드 룰===
 - (톤 문서에서 추출한 절대 규칙들)
+
+===Plant-Payoff 에피소드 맵===
+시즌 아크의 Plant-Payoff 쌍을 에피소드·비트 단위로 구체화:
+[장기 Plant-Payoff] 최소 6개 (캐릭터/관계/세계관 각 2개 이상)
+- Plant 1: EP?-Beat? — [심기 내용] → Payoff: EP?-Beat? — [회수 방식]
+[단기 Plant-Payoff] 에피소드 내
+- EP1: plant=? / payoff=?
 
 각 항목은 기획 자료에서 직접 추출. 없는 항목은 "기획 자료에 없음 — 집필 시 설계 필요"로 표기.
 """.strip()
@@ -944,6 +1152,17 @@ def build_episode_plan_prompt(
 - A 씬 2~3개 → B 씬 1개 → A 씬 2개 → C 씬 1개 → BR → 반복
 - 스토리라인 간 전환은 감정 대비로 (긴장→이완, 슬픔→유머)
 
+[비트 구조 변주 — 2막 반복 방지]
+각 비트에 6유형 중 하나를 배정. 연속 2비트가 같은 유형이면 안 된다:
+  [INV] 조사/발견 / [CON] 대결/충돌 / [REV] 반전/배신
+  [EMO] 감정/관계 / [ACT] 행동/추격 / [SIL] 정적/결심
+
+[Plant-Payoff 배치]
+시즌 아크의 Plant-Payoff 맵을 확인하고, 이 에피소드에서 심거나 회수할 항목을 명시하라.
+
+[기능적 조연 배치]
+이 에피소드에서 필요한 기능적 조연을 씬 플랜에 배치하라.
+
 출력 형식:
 
 ### EP{ep_num} 씬 플랜 — [에피소드 부제]
@@ -973,6 +1192,10 @@ S#마지막. 장소 — 시간 | [A] | 인물 | ★Punch=클리프행어
 - Water Cooler Moment (화제 장면)
 - 에피소드 종료 시 열린 질문
 - 시즌 질문 진전
+- 비트별 구조 유형: B0=[?] B1=[?] ... B7=[?] (연속 같은 유형 없는지 검증)
+- Plant 배치: 이 에피소드에서 심는 것
+- Payoff 배치: 이 에피소드에서 회수하는 것
+- 기능적 조연 목록
 - 비밀 경제 현황: 터진 비밀 / 새로 생긴 비밀 / 유지 중인 비밀
 
 한국어, 간결하고 시각적인 시나리오 작가의 언어로."""
@@ -988,6 +1211,9 @@ def build_write_episode_beat_prompt(
     num_episodes: int, duration: int, genre: str,
     prev_beat_text: str = "", character_bible: str = "",
     story_elements: str = "", locked_block: str = "",
+    producer_notes: str = "",
+    prev_beat_structure_type: str = "",
+    episode_context_summary: str = "",
 ) -> str:
     gr = _genre_text(genre)
     beat_info = EPISODE_BEATS[beat_num] if beat_num < len(EPISODE_BEATS) else EPISODE_BEATS[-1]
@@ -1005,6 +1231,21 @@ def build_write_episode_beat_prompt(
     if prev_beat_text:
         tail = prev_beat_text[-2500:]
         prev_block = f"\n[직전 비트 마지막 부분 — 연속성 유지]\n{tail}\n"
+
+    # v1.7: 컨텍스트 오버플로 대응
+    context_block = ""
+    if episode_context_summary:
+        context_block = f"\n[이전 에피소드 요약]\n{episode_context_summary[:2000]}\n"
+
+    # v1.7: 프로듀서 노트 집필모드 주입
+    producer_block = ""
+    if producer_notes and producer_notes.strip():
+        producer_block = f"\n[🎬 프로듀서 노트 — 이 비트에 반영]\n{producer_notes}\n"
+
+    # v1.7: 비트 구조 변주
+    structure_type_block = ""
+    if prev_beat_structure_type:
+        structure_type_block = f"\n[⚡ 비트 구조 변주 — 직전: [{prev_beat_structure_type}] → 다른 유형 선택]\n6유형: [INV] [CON] [REV] [EMO] [ACT] [SIL]\n"
 
     # Beat 0 = 콜드 오프닝 특별 지시
     cold_open_block = ""
@@ -1185,9 +1426,33 @@ def build_write_episode_beat_prompt(
 15. 감정 연쇄 — 3% 법칙. 이 씬의 감정 톤이 다음 씬의 전제.
 16. Intention & Obstacle — 매 씬에서 "누가 뭘 원하고, 뭐가 막는가" 명확히.
 17. Nonsense Filter — 목적 없는 장면, 시즌 아크 무관 가지치기 금지.
+
+[RULES — 장르 드라이브 5-point Check (v1.7)]
+이 비트를 집필하기 전에 아래 5개 질문에 답하라:
+  ① 정보 비대칭: 관객이 아는데 주인공이 모르는 것은?
+  ② 에스컬레이션: 직전 비트보다 위협이 커졌는가?
+  ③ 적대자: 구체적으로 무엇을 했는가? 승/패?
+  ④ 타이머/데드라인: 남은 시간·자원이 줄었는가?
+  ⑤ 장르 쾌감: "손에 땀" 순간이 최소 1개 있는가?
+  3개 이상 "아니오"면 장르 드라이브를 올려라.
+
+[RULES — 액션 아이디어 검증 (v1.7)]
+이 비트는 시즌 아크의 핵심 행동을 향해 전진하는가? (전진/방해→OK, 무관→연결하라)
+
+[RULES — 서사동력 비트별 체크 (v1.7)]
+Goal↔Need 간극: EP1~4=벌어짐 / EP5~6=인식 / EP7~8=합치 또는 선택.
+
+[기능적 조연 — 세계를 살리는 인물들 (v1.7)]
+- 씬 플랜의 기능적 조연을 반드시 살려라.
+- 주요 캐릭터만으로 모든 씬을 채우면 세계가 비어 보인다.
+- 기능적 조연 = 이름(성+직함) + 나이 + 한 줄 외형 + 행동. 바이블 불필요.
 18. 빌런 추적 — 이 비트에서 적대자가 뭘 했는가? 직접 등장 안 해도 영향이 느껴져야 한다.
     ★ 클라이맥스 전까지 적대자가 계속 이기고 있어야 한다. 빌런이 매번 실패하면 긴장감 사라진다. ★
-19. LOCKED 검증 — 출력 완료 후 LOCKED 항목 준수 여부 자가 검증. 위반 시 원본으로 되돌려라.
+19. LOCKED 검증 — 출력 완료 후 LOCKED 항목 준수 여부 자가 검증.
+20. AI ESCAPE — A1~A10 패턴 자가 점검:
+   감정 설명 지문(A1) / 같은 말투(A2) / 본 것 반복(A3) / 무대 연출(A4) /
+   편의적 정보(A5) / 침묵 부재(A6) / 대사 대칭(A7) / 처음부터 시작(A8) /
+   같은 씬 해소(A9) / 총칭적 감각(A10) — 1개라도 해당되면 해당 부분을 다시 써라.
 20. 서사동력 검증 — 이 비트에서 주인공의 행동이 desire_origin(loss/lack)과 arc_direction에 일치하는가?
     Goal을 추구하면서 Need와의 간극이 드러나는가? 서사동력과 어긋나는 행동은 캐릭터 일관성의 붕괴다.
 
@@ -1211,7 +1476,11 @@ EP{ep_num} — Beat {beat_num}. {beat_info['name']}
 - 빌런 추적: 이 비트에서 적대자가 한 구체적 행동 + 승/패 (빌런이 이겼는가?)
 - LOCKED 검증: LOCKED 항목 준수 여부 — 'OK' 또는 위반 항목 명시
 - 서사동력 추적: 이 비트에서 주인공의 행동이 desire_origin/arc_direction과 일치하는가? Goal↔Need 간극 진전도.
-- 보이스 점검: 각 인물의 speech_pattern 준수 여부 + sample_lines 톤 일치 여부
+- 보이스 점검: 각 인물의 speech_pattern 준수 여부
+- ⭐ 장르 드라이브 5점: ①정보비대칭 ②에스컬레이션↑/→/↓ ③적대자 행동+승패 ④타이머 ⑤장르 쾌감 1줄
+- ⭐ 액션 아이디어 전진: 전진/방해/무관
+- ⭐ 서사동력: Goal 추구 / Need 인식 / 간극 상태
+- AI ESCAPE 점검: A1~A10 중 위반 항목
 """.strip()
 
 
@@ -1258,7 +1527,7 @@ def build_rewrite_prompt(
 12. B-Story 점검 — B-Story 씬 또는 B-Story 시간축 언급이 있는가?
 
 [OUTPUT]
-개선된 시나리오 전문. 마지막에 --- 후 변경 요약 3줄.
+개선된 시나리오 전문. 마지막에 --- 후 변경 요약 3줄 + AI ESCAPE A1~A10 점검 결과.
 """.strip()
 
 
@@ -1381,4 +1650,7 @@ def build_structural_rewrite_prompt(
 
 [LOCKED 검증]
 - LOCKED 항목 준수 여부: OK 또는 위반 항목
+
+[AI ESCAPE 점검]
+- A1~A10 중 위반 항목
 """.strip()
