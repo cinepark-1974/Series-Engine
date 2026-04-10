@@ -1,5 +1,5 @@
 """
-👖 BLUE JEANS SERIES ENGINE v1.6 — main.py
+👖 BLUE JEANS SERIES ENGINE v1.7 — main.py
 시즌 아크 → 에피소드 씬 플랜 → 비트 집필 파이프라인
 © 2026 BLUE JEANS PICTURES
 """
@@ -16,13 +16,17 @@ from prompt import (
     SEASON_BEATS_8,
     SEASON_BEATS_6,
     EPISODE_BEATS,
+    BEAT_STRUCTURE_TYPES,
     build_locked_block,
     build_season_arc_prompt,
+    build_character_expansion_prompt,
+    build_event_expansion_prompt,
     build_extract_elements_prompt,
     build_episode_plan_prompt,
     build_write_episode_beat_prompt,
     build_rewrite_prompt,
     build_structural_rewrite_prompt,
+    summarize_episode_context,
 )
 
 # ──────────────────────────────────────────────
@@ -501,10 +505,15 @@ DEFAULTS = {
     "genre": "범죄/스릴러",
     "season_arc": "",
     "story_elements": "",
+    "expanded_characters": "",
+    "expanded_events": "",
     "episode_plans": {},
     "episode_beats": {},
+    "beat_structure_types": {},
+    "episode_summaries": {},
     "locked_items": [],
     "open_items": [],
+    "producer_notes_write": "",
 }
 
 for k, v in DEFAULTS.items():
@@ -678,7 +687,7 @@ def build_docx_download(text: str, filename: str, title: str = ""):
         footer = section.footer
         fp = footer.paragraphs[0]
         fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        fr = fp.add_run("BLUE JEANS SERIES ENGINE v1.6 · BLUE JEANS PICTURES")
+        fr = fp.add_run("BLUE JEANS SERIES ENGINE v1.7 · BLUE JEANS PICTURES")
         fr.font.size = Pt(7)
         fr.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
 
@@ -890,7 +899,7 @@ if mode == "🔄 리라이트":
             st.rerun()
 
     st.markdown("---")
-    st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.6")
+    st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.7")
     st.stop()
 
 
@@ -1029,31 +1038,68 @@ else:
 
 
 # ══════════════════════════════════════════════
-# STEP 2.5: 핵심 요소 추출 (자동)
+# STEP 2.5: 시리즈 확장 (v1.7 — 캐릭터·사건 보강 + 핵심 요소 + Plant-Payoff)
 # ══════════════════════════════════════════════
 
-if st.session_state["season_arc"] and not st.session_state["story_elements"]:
+if st.session_state["season_arc"]:
     st.markdown(
-        '<div class="section-header">🔍 핵심 요소 추출 <span class="en">STORY ELEMENTS</span></div>',
+        '<div class="section-header">🔧 시리즈 확장 <span class="en">STEP 2.5 · SERIES EXPANSION</span></div>',
         unsafe_allow_html=True,
     )
-    st.caption("맥거핀 · 캐릭터 비밀 · 전술 · 핵심 장소 · 모티프 — 매 비트 집필 시 강제 주입됩니다.")
 
-    if st.button("🔍 핵심 요소 추출", type="primary", use_container_width=True):
-        prompt = build_extract_elements_prompt(
-            st.session_state["inputs"],
-            st.session_state["season_arc"],
-            genre,
-            locked_block=_get_locked_block(),
-        )
-        with st.spinner("핵심 요소를 추출하고 있습니다..."):
-            result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_ARC, model=MODEL_PLAN)
-        st.session_state["story_elements"] = result
-        st.rerun()
+    # ── 2.5a: 캐릭터 확장 ──
+    if not st.session_state.get("expanded_characters"):
+        st.caption("① 시즌 아크를 분석하여 부족한 캐릭터를 생성합니다.")
+        if st.button("👤 캐릭터 확장 분석", type="primary", use_container_width=True, key="char_expand"):
+            prompt = build_character_expansion_prompt(
+                st.session_state["inputs"],
+                st.session_state["season_arc"],
+                genre, ne,
+                locked_block=_get_locked_block(),
+            )
+            with st.spinner("캐릭터 확장을 분석하고 있습니다..."):
+                result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_ARC, model=MODEL_PLAN)
+            st.session_state["expanded_characters"] = result
+            st.rerun()
+    else:
+        with st.expander("👤 캐릭터 확장 (완료)", expanded=False):
+            st.markdown(st.session_state["expanded_characters"])
 
-elif st.session_state["story_elements"]:
-    with st.expander("🔍 핵심 요소 (완료)", expanded=False):
-        st.markdown(st.session_state["story_elements"])
+    # ── 2.5b: 사건 보강 ──
+    if st.session_state.get("expanded_characters") and not st.session_state.get("expanded_events"):
+        st.caption("② 시즌 아크와 기존 트리트먼트를 대조하여 부족한 사건을 보강합니다.")
+        if st.button("📋 사건 보강 분석", type="primary", use_container_width=True, key="event_expand"):
+            prompt = build_event_expansion_prompt(
+                st.session_state["inputs"],
+                st.session_state["season_arc"],
+                genre, ne,
+                locked_block=_get_locked_block(),
+            )
+            with st.spinner("사건을 보강하고 있습니다..."):
+                result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_ARC, model=MODEL_PLAN)
+            st.session_state["expanded_events"] = result
+            st.rerun()
+    elif st.session_state.get("expanded_events"):
+        with st.expander("📋 사건 보강 (완료)", expanded=False):
+            st.markdown(st.session_state["expanded_events"])
+
+    # ── 2.5c: 핵심 요소 추출 + Plant-Payoff 맵 ──
+    if st.session_state.get("expanded_events") and not st.session_state["story_elements"]:
+        st.caption("③ 맥거핀 · 비밀 · 전술 · 장소 · 모티프 · Plant-Payoff 맵을 추출합니다.")
+        if st.button("🔍 핵심 요소 + Plant-Payoff 추출", type="primary", use_container_width=True, key="extract_elements"):
+            prompt = build_extract_elements_prompt(
+                st.session_state["inputs"],
+                st.session_state["season_arc"],
+                genre,
+                locked_block=_get_locked_block(),
+            )
+            with st.spinner("핵심 요소를 추출하고 있습니다..."):
+                result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_ARC, model=MODEL_PLAN)
+            st.session_state["story_elements"] = result
+            st.rerun()
+    elif st.session_state["story_elements"]:
+        with st.expander("🔍 핵심 요소 + Plant-Payoff (완료)", expanded=False):
+            st.markdown(st.session_state["story_elements"])
 
 
 # ══════════════════════════════════════════════
@@ -1141,6 +1187,17 @@ if st.session_state["episode_plans"]:
         unsafe_allow_html=True,
     )
 
+    # v1.7: 프로듀서 노트 (집필모드)
+    with st.expander("🎬 프로듀서 노트 (집필 시 반영)", expanded=False):
+        st.caption("여기에 입력한 노트가 모든 비트 집필에 자동 주입됩니다.")
+        st.session_state["producer_notes_write"] = st.text_area(
+            "프로듀서 노트",
+            value=st.session_state.get("producer_notes_write", ""),
+            height=100,
+            placeholder="예: 대사를 더 날카롭게, B-Story 비중을 늘려라, EP3부터 긴장감 ↑",
+            key="producer_notes_write_input",
+        )
+
     available_eps = sorted(st.session_state["episode_plans"].keys())
     selected_ep = st.selectbox(
         "집필할 에피소드 선택",
@@ -1198,6 +1255,21 @@ if st.session_state["episode_plans"]:
                 type="primary",
                 use_container_width=True,
             ):
+                # v1.7: 비트 구조 유형 추적
+                prev_struct = st.session_state.get("beat_structure_types", {}).get(
+                    bk(selected_ep, next_beat - 1), ""
+                ) if next_beat > 0 else ""
+                # v1.7: 이전 에피소드 요약 (컨텍스트 관리)
+                ep_summary = ""
+                if selected_ep > 1:
+                    ep_summary = st.session_state.get("episode_summaries", {}).get(selected_ep - 1, "")
+                    if not ep_summary:
+                        ep_summary = summarize_episode_context(st.session_state["episode_beats"], selected_ep - 1)
+                        if ep_summary:
+                            if "episode_summaries" not in st.session_state:
+                                st.session_state["episode_summaries"] = {}
+                            st.session_state["episode_summaries"][selected_ep - 1] = ep_summary
+
                 prompt = build_write_episode_beat_prompt(
                     st.session_state["inputs"],
                     st.session_state["season_arc"],
@@ -1207,10 +1279,20 @@ if st.session_state["episode_plans"]:
                     character_bible=char_bible,
                     story_elements=st.session_state.get("story_elements", ""),
                     locked_block=_get_locked_block(),
+                    producer_notes=st.session_state.get("producer_notes_write", ""),
+                    prev_beat_structure_type=prev_struct,
+                    episode_context_summary=ep_summary,
                 )
                 with st.spinner(f"EP{selected_ep} Beat {next_beat}을 집필하고 있습니다..."):
                     result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_BEAT)
                 st.session_state["episode_beats"][bk(selected_ep, next_beat)] = result
+                # v1.7: 비트 구조 유형 자동 추출
+                if "beat_structure_types" not in st.session_state:
+                    st.session_state["beat_structure_types"] = {}
+                for code in ["INV", "CON", "REV", "EMO", "ACT", "SIL"]:
+                    if f"[{code}]" in result:
+                        st.session_state["beat_structure_types"][bk(selected_ep, next_beat)] = code
+                        break
                 st.rerun()
         else:
             st.markdown(
@@ -1299,4 +1381,4 @@ with st.expander("⚠️ 전체 초기화", expanded=False):
         st.rerun()
 
 st.markdown("---")
-st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.6")
+st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.7")
