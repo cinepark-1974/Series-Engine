@@ -559,7 +559,7 @@ S#번호. INT./EXT. 장소 — 시간
 
 GENRE_RULES = {
     "범죄/스릴러": {
-        "en": "Crime / Thriller / Noir",
+        "en": "Crime / Thriller / Noir Series",
         "core": "정보 비대칭과 압박, 도덕적 모호함 속 타락과 생존 대가.",
         "engine": "사건 엔진 + 비밀 엔진 — 매 회 수사 진전, 용의자/증거, 동맹과 배신의 경계 이동",
         "season_q": "\"범인은 누구인가?\" / \"주인공은 살아남는가?\" / \"주인공은 어디까지 타락하는가?\"",
@@ -581,7 +581,7 @@ GENRE_RULES = {
         "forbidden": "수사관의 독백으로 사건 정리, 우연의 단서 발견, 도덕적 명확성",
     },
     "드라마": {
-        "en": "Drama",
+        "en": "Drama Series",
         "core": "인간의 선택과 대가를 통해 관계의 진실에 도달하는 장르.",
         "engine": "관계 엔진 — 매 회 관계의 균열·복원·변화",
         "season_q": "\"이 가족/공동체는 다시 하나가 될 수 있는가?\"",
@@ -603,7 +603,7 @@ GENRE_RULES = {
         "forbidden": "감정을 직접 말하는 대사 (Too Wet), 갈등 없는 화해",
     },
     "액션": {
-        "en": "Action",
+        "en": "Action Series",
         "core": "물리적 목표와 대가 속에서 캐릭터 의지를 증명하는 장르.",
         "engine": "사건 엔진 — 매 회 미션/작전이 에스컬레이션",
         "season_q": "\"주인공은 임무를 완수하는가?\" 또는 \"대가를 치르고도 싸울 가치가 있는가?\"",
@@ -625,7 +625,7 @@ GENRE_RULES = {
         "forbidden": "설명으로 처리하는 액션, 무의미한 총격전 반복, 빌런의 동기 없는 폭력",
     },
     "코미디": {
-        "en": "Comedy",
+        "en": "Comedy Series",
         "core": "웃음 메커니즘이 작동하는 장르. 떠드는 장르가 아니다.",
         "engine": "관계 엔진 + 사건 엔진 — 매 회 캐릭터 결함이 새로운 사고를 친다",
         "season_q": "\"이 인물은 자기 결함을 극복하는가?\" 또는 \"이 관계는 어디로 가는가?\"",
@@ -646,8 +646,8 @@ GENRE_RULES = {
         "fails": ["설정 안 웃김", "캐릭터 결함이 웃음 비생산", "대사 길고 뻔함", "농담이 서사 정지"],
         "forbidden": "상황 설명으로 웃기려는 시도, 같은 개그 반복, 인물 비하로 웃음 유발",
     },
-    "호러": {
-        "en": "Horror",
+    "호러/공포": {
+        "en": "Horror Series",
         "core": "공포의 예감과 축적으로 안전감을 체계적으로 파괴하는 장르.",
         "engine": "비밀 엔진 + 규칙 발견 — 매 회 공포의 규칙이 하나씩 드러남",
         "season_q": "\"이 저주/위협에서 벗어날 수 있는가?\"",
@@ -665,7 +665,7 @@ GENRE_RULES = {
         "forbidden": "공포 원인의 과잉 설명, jump scare만 반복",
     },
     "SF": {
-        "en": "Science Fiction",
+        "en": "Science Fiction Series",
         "core": "세계의 규칙이 인간 드라마의 은유로 작동하는 장르.",
         "engine": "세계 엔진 — 매 회 세계관의 새로운 층이 열림",
         "season_q": "\"이 세계의 진짜 규칙은 무엇인가?\"",
@@ -687,7 +687,7 @@ GENRE_RULES = {
         "forbidden": "세계관 설명 강의, 대가 없는 능력, 데우스 엑스 마키나",
     },
     "판타지": {
-        "en": "Fantasy",
+        "en": "Fantasy Series",
         "core": "마법의 규칙과 대가가 인간 성장의 은유로 작동하는 장르.",
         "engine": "세계 엔진 — 매 회 세계관의 새로운 층이 열림",
         "season_q": "\"이 세계의 진짜 규칙은 무엇인가?\"",
@@ -708,8 +708,8 @@ GENRE_RULES = {
         "fails": ["대가 없는 능력", "설명 과잉", "인간 드라마 약함"],
         "forbidden": "대가 없는 만능 마법, 예언에 의한 수동적 전개, 악의 동기 없는 빌런",
     },
-    "로맨스": {
-        "en": "Romance / Melodrama",
+    "로맨스/멜로": {
+        "en": "Romance / Melodrama Series",
         "core": "갈망의 축적과 감정의 지연이 만드는 아픔과 회수의 장르.",
         "engine": "관계 엔진 — 매 회 두 사람의 거리가 진동",
         "season_q": "\"이 두 사람은 결국 함께할 수 있는가?\"",
@@ -731,7 +731,7 @@ GENRE_RULES = {
         "forbidden": "오해가 대화 한 마디로 해결, 삼각관계 기계적 반복",
     },
     "미스터리": {
-        "en": "Mystery",
+        "en": "Mystery Series",
         "core": "진실에 대한 탐색이 인물과 세계를 변화시키는 장르.",
         "engine": "비밀 엔진 — 매 회 퍼즐 조각이 하나씩 맞춰지며 더 큰 미스터리가 열림",
         "season_q": "\"진실은 무엇인가?\" / \"누가 거짓말을 하고 있는가?\"",
@@ -797,171 +797,6 @@ def _genre_text(genre: str) -> str:
     )
 
 
-
-# ═══════════════════════════════════════════════════════════
-# 장르 특화 규칙 (Genre Override — Writer Engine v3.0 동기화)
-# ═══════════════════════════════════════════════════════════
-
-def _is_comedy(genre: str) -> bool:
-    g = genre.lower()
-    return "코미디" in g or "comedy" in g or "롬코" in g
-
-def _is_horror(genre: str) -> bool:
-    g = genre.lower()
-    return "호러" in g or "공포" in g or "horror" in g
-
-def _is_romance(genre: str) -> bool:
-    g = genre.lower()
-    return "로맨스" in g or "멜로" in g or "romance" in g or "롬코" in g or "로맨틱" in g
-
-def _is_action(genre: str) -> bool:
-    g = genre.lower()
-    return "액션" in g or "action" in g
-
-def _is_drama(genre: str) -> bool:
-    g = genre.lower()
-    return "드라마" in g or "drama" in g
-
-def _is_thriller(genre: str) -> bool:
-    g = genre.lower()
-    if _is_horror(genre):
-        return False
-    return "스릴러" in g or "thriller" in g or "범죄" in g or "crime" in g or "누아르" in g or "noir" in g
-
-def _is_sf(genre: str) -> bool:
-    g = genre.lower()
-    return "sf" in g or "sci" in g or "에스에프" in g
-
-def _is_fantasy(genre: str) -> bool:
-    g = genre.lower()
-    return "판타지" in g or "fantasy" in g
-
-
-COMEDY_OVERRIDE = """
-[코미디 특화 규칙 — COMEDY OVERRIDE]
-★ 이 작품의 장르는 코미디다. 아래 규칙이 드라마/스릴러 기본 규칙보다 우선한다. ★
-
-[1. 코미디 캐릭터] 코믹 결함(comic flaw)이 모든 웃음의 원천. 빌런도 웃겨야 한다.
-[2. 코미디 구조] 2막은 거짓말/오해 눈덩이. Stakes는 죽음이 아니라 수치(embarrassment).
-[3. 코미디 씬] 모든 씬에 코믹 엔진: 상태역전/반복에스컬레이션/극과극대비/관객우월감. Rule of Three.
-[4. 코미디 대사 7기법] Misdirection/Callback/Topper/Deadpan/Status Flip/Comic Specificity/Non-sequitur.
-   대사가 코미디의 절반. 지문이 이끄면 드라마.
-[5. 코미디 감정] 웃다가 갑자기 아프다 → 아프면서 웃기다.
-[6. 절대 규칙]
-   - 대사:지문 비율 최소 1:1. 대사가 더 많아도 좋다.
-   - ★★ 톤 문서의 "지문 60%" 지시 무시. 코미디에서 대사는 최소 50% 이상.
-   - 대사 없이 지문 3줄 연속 금지 (BR 씬 제외).
-   - 매 씬 최소 1개 웃음 포인트 필수. 없으면 코미디가 아니다.
-   - 첫 씬(S#1)에서 반드시 대사. 무음 오프닝은 코미디를 죽인다.
-   - 코미디 지문은 짧다 (1~2줄). "~한다. ~한다. ~한다." 3연속 금지.
-"""
-
-HORROR_OVERRIDE = """
-[호러 특화 규칙 — HORROR OVERRIDE]
-★ 이 작품은 호러다. 아래 규칙이 드라마/스릴러 기본 규칙보다 우선한다. ★
-
-[1. 감각 우선] 소리/온도/냄새/촉감이 시각보다 먼저. 보여주기 전이 가장 무섭다.
-[2. 일상 속 균열] 초자연이 아니라 '뭔가 이상하다'는 감각이 공포의 시작.
-[3. 안전→위협 리듬] 모든 비트에 가짜 안도(false relief) 1회 필수. 긴장→고조→가짜 안도→진짜 공포.
-[4. 위협의 규칙] 관객이 규칙을 이해해야 '저러면 안 되는데!'라는 공포가 생긴다.
-[5. 공간이 캐릭터] 장소 묘사를 인물처럼 써라. 공간이 의지를 가진 것처럼.
-[6. 대사는 적게, 침묵은 길게] 호러의 대사 밀도는 드라마의 절반. 침묵과 소리가 공포를 만든다.
-[7. 비트 끝은 열린 공포] "아직 끝나지 않았다"는 잔여 공포를 남겨라.
-"""
-
-ROMANCE_OVERRIDE = """
-[로맨스 특화 규칙 — ROMANCE OVERRIDE]
-★ 이 작품은 로맨스다. 아래 규칙이 기본 규칙보다 우선한다. ★
-
-[1. 갈망의 축적] 감정은 쌓여야 한다. 첫 만남부터 고백하지 마라.
-[2. 거리의 진동] 매 씬에서 두 사람의 거리가 변해야 한다(가까워지거나 멀어지거나).
-[3. 신체적 디테일] 감정을 설명하지 말고 몸으로 보여줘라. 손끝, 시선, 호흡, 발걸음.
-[4. 타이밍의 어긋남] 가장 강한 로맨스 장치. 한 사람이 준비됐을 때 다른 사람이 안 된다.
-[5. 감정 보류] Too Wet 금지. 감정을 참는 인물이 터뜨리는 인물보다 강하다.
-[6. 대사:침묵 비율] 핵심 감정 씬에서 대사보다 침묵이 더 많아야 한다.
-"""
-
-ACTION_OVERRIDE = """
-[액션 특화 규칙 — ACTION OVERRIDE]
-★ 이 작품은 액션이다. 아래 규칙이 기본 규칙보다 우선한다. ★
-
-[1. 공간 지리] 전투/추격 씬에서 관객이 공간 구조를 이해해야 한다. 위치 관계 명시.
-[2. 전술 변화] 같은 전술 2회 연속 금지. 매 전투마다 전술이 바뀌어야 한다.
-[3. 물리적 대가] 액션 후 대가가 몸에 남아야 한다. 무상 액션 금지.
-[4. 감정 안의 액션] 액션 시퀀스 안에 캐릭터의 감정적 판돈이 있어야 한다.
-[5. 에스컬레이션] 1막 → 2막 → 3막으로 갈수록 스케일과 난이도가 올라간다.
-[6. 리듬 변주] 고속 액션 → 정적 순간 → 다시 고속. 같은 템포로 밀어붙이면 관객이 지친다.
-"""
-
-DRAMA_OVERRIDE = """
-[드라마 특화 규칙 — DRAMA OVERRIDE]
-★ 이 작품은 드라마다. 아래 규칙이 기본 규칙보다 우선한다. ★
-
-[1. 감정의 진정성] 추상적 감정이 아니라 구체적 경험에서 나오는 디테일.
-[2. 관계의 변화] 매 씬에서 관계가 전진하거나 후퇴해야 한다. 정체 금지.
-[3. 선택과 대가] 인물의 선택에 되돌릴 수 없는 대가가 따른다.
-[4. 침묵의 힘] 감정을 말로 설명하면 약해진다. 행동과 침묵으로 보여줘라.
-[5. 서브텍스트] 모든 대사 아래에 숨은 의도가 있어야 한다.
-[6. Too Wet 금지] 슬픈 장면에서 캐릭터가 울면 관객은 울지 않는다.
-"""
-
-THRILLER_OVERRIDE = """
-[스릴러/범죄 특화 규칙 — THRILLER OVERRIDE]
-★ 이 작품은 스릴러/범죄다. 아래 규칙이 기본 규칙보다 우선한다. ★
-
-[1. 정보 제어] 관객에게 주는 정보의 양과 타이밍이 긴장의 핵심.
-[2. 시계 장치] 매 비트에 시간 압박 또는 자원 소진이 있어야 한다.
-[3. 도덕적 타락] 주인공의 도덕선이 에피소드마다 후퇴한다.
-[4. 이중 배신 구조] 믿었던 인물이 배신하고, 배신한 인물이 다시 돌아온다.
-[5. 냉정한 톤] 감정 과잉 금지. 건조하고 사실적인 톤. 감정은 행동으로.
-[6. 페이크아웃] 진짜 위협 전에 가짜 위협을 1회 배치.
-"""
-
-SF_OVERRIDE = """
-[SF 특화 규칙 — SF OVERRIDE]
-★ 이 작품은 SF다. 아래 규칙이 기본 규칙보다 우선한다. ★
-
-[1. 세계관 규칙 = 드라마 규칙] 세계관의 규칙이 인물의 딜레마를 만들어야 한다.
-[2. Show, Don't Explain] 설명 대사로 세계관을 전달하지 마라. 행동과 결과로 보여줘라.
-[3. 대가 있는 기술] 모든 기술/능력에 대가가 있어야 한다. 만능 기술 금지.
-[4. 인간 앵커] 아무리 기이한 세계관이라도 관객이 감정적으로 연결할 인간적 핵심이 필요하다.
-[5. 정보 배급량] 매 비트에서 세계관 정보는 1~2개만. 과부하 금지.
-[6. 내부 일관성] 한번 설정된 규칙은 절대 위반하지 마라. 위반하면 세계관이 무너진다.
-"""
-
-FANTASY_OVERRIDE = """
-[판타지 특화 규칙 — FANTASY OVERRIDE]
-★ 이 작품은 판타지다. 아래 규칙이 기본 규칙보다 우선한다. ★
-
-[1. 마법의 대가] 마법/능력을 쓸수록 잃는 것이 커져야 한다. 무한 마법 금지.
-[2. 문턱 넘기] 주인공이 일상 세계에서 판타지 세계로 진입하는 순간이 있어야 한다.
-[3. 경이로움과 위험의 동시 제시] 새 세계는 아름답지만 위험하다.
-[4. 멘토의 불완전성] 멘토가 완벽하면 주인공이 성장할 필요가 없다.
-[5. 내면 성장 = 외부 승리] 최종 대결에서 이기는 것은 새 능력이 아니라 내면의 변화.
-[6. 예언의 함정] 예언은 수동적 전개를 만든다. 쓰려면 예언을 깨는 것이 이야기여야 한다.
-"""
-
-
-def get_genre_override(genre: str) -> str:
-    """장르별 특화 규칙 반환. 복합 장르면 둘 다 반환."""
-    parts = []
-    if _is_comedy(genre):
-        parts.append(COMEDY_OVERRIDE)
-    if _is_horror(genre):
-        parts.append(HORROR_OVERRIDE)
-    if _is_romance(genre):
-        parts.append(ROMANCE_OVERRIDE)
-    if _is_action(genre):
-        parts.append(ACTION_OVERRIDE)
-    if _is_drama(genre):
-        parts.append(DRAMA_OVERRIDE)
-    if _is_thriller(genre):
-        parts.append(THRILLER_OVERRIDE)
-    if _is_sf(genre):
-        parts.append(SF_OVERRIDE)
-    if _is_fantasy(genre):
-        parts.append(FANTASY_OVERRIDE)
-    return "\n".join(parts)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1460,7 +1295,6 @@ def build_write_episode_beat_prompt(
     episode_context_summary: str = "",
 ) -> str:
     gr = _genre_text(genre)
-    genre_override = get_genre_override(genre)
     beat_info = EPISODE_BEATS[beat_num] if beat_num < len(EPISODE_BEATS) else EPISODE_BEATS[-1]
     target = EP_SCENE_TARGETS.get(duration, EP_SCENE_TARGETS[50])
 
@@ -1552,7 +1386,6 @@ def build_write_episode_beat_prompt(
 
 [장르]
 {gr}
-{genre_override}
 
 [로그라인] {inputs.get('logline', '(씬 플랜 참조)')[:300]}
 {cold_open_block}
@@ -1742,7 +1575,6 @@ def build_rewrite_prompt(
     locked_block: str = "",
 ) -> str:
     gr = _genre_text(genre)
-    genre_override = get_genre_override(genre)
     char_block = character_bible[:3000] if character_bible else ""
     user_inst = instruction.strip() if instruction else "극적 힘, 서브텍스트, 캐릭터 보이스, 장르 효능, Hook & Punch, 클리프행어를 강화하라."
 
@@ -1754,7 +1586,6 @@ def build_rewrite_prompt(
 
 [장르]
 {gr}
-{genre_override}
 
 {f"[캐릭터 바이블 — 말투 반영 필수]{chr(10)}{char_block}" if char_block else ""}
 
@@ -1803,7 +1634,6 @@ def build_structural_rewrite_prompt(
     후속 에피소드(EP5~8)와의 연속성을 유지한다."""
 
     gr = _genre_text(genre)
-    genre_override = get_genre_override(genre)
     beat_info = EPISODE_BEATS[beat_num] if beat_num < len(EPISODE_BEATS) else EPISODE_BEATS[-1]
     char_block = character_bible[:4000] if character_bible else ""
 
@@ -1853,7 +1683,6 @@ def build_structural_rewrite_prompt(
 
 [장르]
 {gr}
-{genre_override}
 
 [시즌 아크 (요약)]
 {season_arc[:2000]}
