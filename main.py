@@ -1,5 +1,5 @@
 """
-👖 BLUE JEANS SERIES ENGINE v1.7 — main.py
+👖 BLUE JEANS SERIES ENGINE v1.8 — main.py
 시즌 아크 → 에피소드 씬 플랜 → 비트 집필 파이프라인
 © 2026 BLUE JEANS PICTURES
 """
@@ -8,6 +8,7 @@ import streamlit as st
 import anthropic
 import io
 import re
+import json
 from datetime import datetime
 
 from prompt import (
@@ -28,6 +29,10 @@ from prompt import (
     build_rewrite_prompt,
     build_structural_rewrite_prompt,
     summarize_episode_context,
+    extract_from_creator_json_series,
+    get_essence_check,
+    sanitize_json_string,
+    JSON_OUTPUT_RULES,
 )
 
 # ──────────────────────────────────────────────
@@ -689,7 +694,7 @@ def build_docx_download(text: str, filename: str, title: str = ""):
         footer = section.footer
         fp = footer.paragraphs[0]
         fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        fr = fp.add_run("BLUE JEANS SERIES ENGINE v1.7 · BLUE JEANS PICTURES")
+        fr = fp.add_run("BLUE JEANS SERIES ENGINE v1.8 · BLUE JEANS PICTURES")
         fr.font.size = Pt(7)
         fr.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
 
@@ -901,7 +906,7 @@ if mode == "🔄 리라이트":
             st.rerun()
 
     st.markdown("---")
-    st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.7")
+    st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.8")
     st.stop()
 
 
@@ -983,6 +988,66 @@ INPUT_FIELDS = [
     ("treatment",  "⑧ 트리트먼트",         "에피소드별 분할 트리트먼트"),
     ("tone",       "⑨ 톤 문서",            "Tone Document (시리즈 톤 지속성 규칙 포함)"),
 ]
+
+# ★ v1.7.1 — Creator Engine JSON 자동 로더
+with st.expander("⚡ Creator Engine JSON 업로드 (자동 채우기)", expanded=False):
+    st.markdown(
+        '<div class="small-meta">Creator Engine에서 내려받은 .json 파일을 업로드하면 '
+        '아래 9칸이 자동으로 채워집니다.</div>',
+        unsafe_allow_html=True,
+    )
+    json_file = st.file_uploader("Creator Engine JSON 파일", type=["json"], key="creator_json_uploader")
+    col_j1, col_j2 = st.columns([1, 2])
+    with col_j1:
+        load_json_btn = st.button("📂 JSON 적용", use_container_width=True,
+                                   disabled=(json_file is None), key="json_load_btn")
+    with col_j2:
+        if json_file is not None:
+            st.caption(f"선택됨: `{json_file.name}`")
+
+    if load_json_btn and json_file is not None:
+        try:
+            raw = json_file.read().decode("utf-8")
+            creator_data = json.loads(raw)
+            loaded = extract_from_creator_json_series(creator_data)
+
+            # 9칸 입력에 주입
+            for key, _, _ in INPUT_FIELDS:
+                if loaded.get(key):
+                    st.session_state["inputs"][key] = loaded[key]
+
+            # v1.8: LOCKED 5종 확장 — Creator JSON에서 추출된 LOCKED 항목 자동 추가
+            locked_ext = loaded.get("locked_5_extended", "")
+            if locked_ext:
+                existing = st.session_state.get("locked_items", [])
+                new_items = [l.strip() for l in locked_ext.split("\n") if l.strip()]
+                # 중복 방지
+                for item in new_items:
+                    if item not in existing:
+                        existing.append(item)
+                st.session_state["locked_items"] = existing
+
+            # 메타 정보
+            meta = creator_data.get("_meta", {})
+            ce_ver = meta.get("engine_version", "?")
+            stage = meta.get("stage", "?")
+            title = loaded.get("title", "(무제)")
+            locked_count = len(locked_ext.split("\n")) if locked_ext else 0
+
+            st.success(
+                f"✅ Creator Engine {ce_ver} / {stage} 단계 로드 완료.\n\n"
+                f"**프로젝트**: {title}\n\n"
+                f"**로드된 필드**: {sum(1 for k, _, _ in INPUT_FIELDS if loaded.get(k))}개 / 9칸\n\n"
+                f"**LOCKED 확장**: {locked_count}개 항목 추가" if locked_count else
+                f"✅ Creator Engine {ce_ver} / {stage} 단계 로드 완료.\n\n"
+                f"**프로젝트**: {title}\n\n"
+                f"**로드된 필드**: {sum(1 for k, _, _ in INPUT_FIELDS if loaded.get(k))}개 / 9칸"
+            )
+            st.rerun()
+        except json.JSONDecodeError as e:
+            st.error(f"JSON 파싱 실패: {e}")
+        except Exception as e:
+            st.error(f"로드 중 오류: {e}")
 
 with st.expander("📝 Creator Engine 결과 붙여넣기 (9칸)", expanded=not st.session_state["season_arc"]):
     for key, label, placeholder in INPUT_FIELDS:
@@ -1400,6 +1465,134 @@ if has_any_beats:
 
 
 # ══════════════════════════════════════════════
+# ★ v1.7.1 — 프로젝트 세션 백업 (중단 시 복구)
+# ══════════════════════════════════════════════
+
+# 백업 대상 키
+_BACKUP_KEYS = [
+    "inputs", "num_episodes", "duration", "genre",
+    "season_arc", "story_elements",
+    "expanded_characters", "expanded_events",
+    "episode_plans", "episode_beats",
+    "beat_structure_types", "episode_summaries",
+    "ep_characters",
+    "locked_items", "open_items",
+    "producer_notes_write",
+]
+
+
+def _export_session_backup() -> bytes:
+    """현재 세션 상태를 JSON bytes로 직렬화."""
+    payload = {
+        "_meta": {
+            "engine": "Series Engine",
+            "engine_version": "v1.7.1",
+            "saved_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "genre": st.session_state.get("genre", ""),
+            "num_episodes": st.session_state.get("num_episodes", 8),
+            "season_arc_done": bool(st.session_state.get("season_arc")),
+            "episodes_planned": len(st.session_state.get("episode_plans", {})),
+            "beats_written": len(st.session_state.get("episode_beats", {})),
+        },
+        "session": {k: st.session_state.get(k) for k in _BACKUP_KEYS},
+    }
+    # 딕셔너리 키를 str로 변환 (JSON 호환)
+    for dict_key in ["episode_plans", "episode_beats", "beat_structure_types", "episode_summaries", "ep_characters"]:
+        val = payload["session"].get(dict_key, {})
+        if isinstance(val, dict):
+            payload["session"][dict_key] = {str(k): v for k, v in val.items()}
+    return json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+
+
+def _import_session_backup(raw_bytes: bytes) -> dict:
+    """JSON bytes를 받아 세션에 복원."""
+    data = json.loads(raw_bytes.decode("utf-8"))
+    session_data = data.get("session", {})
+    meta = data.get("_meta", {})
+
+    for k in _BACKUP_KEYS:
+        if k in session_data:
+            v = session_data[k]
+            # 딕셔너리 키를 int로 복원 (에피소드 번호)
+            if k in ["episode_plans", "ep_characters"] and isinstance(v, dict):
+                v = {int(kk): vv for kk, vv in v.items()}
+            st.session_state[k] = v
+
+    return meta
+
+
+def _make_backup_filename() -> str:
+    genre = st.session_state.get("genre", "")
+    ne = st.session_state.get("num_episodes", 8)
+    eps = len(st.session_state.get("episode_plans", {}))
+    beats = len(st.session_state.get("episode_beats", {}))
+    ts = datetime.now().strftime("%Y%m%d_%H%M")
+    return f"SeriesEngine_{genre}_{ne}ep_{eps}plans_{beats}beats_{ts}.json"
+
+
+st.markdown("---")
+with st.expander("💾 프로젝트 세션 백업 (중단 시 복구용)", expanded=False):
+    st.markdown(
+        '<div class="small-meta">현재 작업 중인 모든 입력칸·시즌 아크·씬 플랜·집필된 비트를 JSON으로 저장하거나 불러옵니다. '
+        '비트 집필 도중 멈추거나 다음 날 이어서 작업할 때 사용하세요.</div>',
+        unsafe_allow_html=True,
+    )
+
+    col_b1, col_b2 = st.columns(2)
+
+    # ── 저장 ──
+    with col_b1:
+        st.markdown("**📥 백업 저장**")
+        _bk_bytes = _export_session_backup()
+        _bk_fname = _make_backup_filename()
+        st.download_button(
+            label=f"💾 JSON 다운로드",
+            data=_bk_bytes,
+            file_name=_bk_fname,
+            mime="application/json",
+            use_container_width=True,
+            key="backup_download_btn",
+        )
+        st.caption(f"`{_bk_fname}`")
+
+    # ── 불러오기 ──
+    with col_b2:
+        st.markdown("**📤 백업 불러오기**")
+        backup_file = st.file_uploader(
+            "백업 JSON 파일", type=["json"],
+            key="backup_uploader",
+            label_visibility="collapsed",
+        )
+        load_backup_btn = st.button(
+            "📂 백업 적용 (현재 작업 덮어쓰기)",
+            use_container_width=True,
+            disabled=(backup_file is None),
+            key="backup_load_btn",
+        )
+
+        if load_backup_btn and backup_file is not None:
+            try:
+                meta = _import_session_backup(backup_file.read())
+                saved_ver = meta.get("engine_version", "?")
+                saved_at = meta.get("saved_at", "?")
+                eps_planned = meta.get("episodes_planned", "?")
+                beats_written = meta.get("beats_written", "?")
+
+                st.success(
+                    f"✅ 백업 복원 완료\n\n"
+                    f"**저장 시각**: {saved_at}\n\n"
+                    f"**엔진 버전**: {saved_ver}\n\n"
+                    f"**씬 플랜**: {eps_planned}개 EP\n\n"
+                    f"**집필 비트**: {beats_written}개"
+                )
+                st.rerun()
+            except json.JSONDecodeError as e:
+                st.error(f"JSON 파싱 실패: {e}")
+            except Exception as e:
+                st.error(f"복원 중 오류: {e}")
+
+
+# ══════════════════════════════════════════════
 # 전체 초기화
 # ══════════════════════════════════════════════
 
@@ -1415,4 +1608,4 @@ with st.expander("⚠️ 전체 초기화", expanded=False):
         st.rerun()
 
 st.markdown("---")
-st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.7")
+st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.8")

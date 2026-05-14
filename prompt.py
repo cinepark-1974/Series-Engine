@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────
-# BLUE JEANS SERIES ENGINE v1.7
+# BLUE JEANS SERIES ENGINE v1.8
 # prompt.py — Full Version (Creator Engine v1.9 + Writer Engine v2.2 동기화)
 # © 2026 BLUE JEANS PICTURES
 # ─────────────────────────────────────────────────────────────
@@ -58,6 +58,38 @@ def build_locked_block(locked_items: list = None, open_items: list = None) -> st
         for item in open_items:
             result += f"- {item}\n"
         result += "</OPEN>\n\n"
+    # v1.8: LOCKED 5종 확장 (Creator v2.5.2 동기화)
+    # Idea Engine 시드 → Creator Engine JSON에 포함되어 넘어온다
+    locked_ext = {}
+    idea_seed = p.get("idea_seed", {}) or {}
+    locked_src = p.get("locked", {}) or core.get("locked", {}) or idea_seed
+    
+    locked_ext["locked_core_decisions"] = locked_src.get("locked_core_decisions", "")
+    locked_ext["locked_music_rules"] = locked_src.get("locked_music_rules", "")
+    locked_ext["locked_visual_motifs"] = locked_src.get("locked_visual_motifs", "")
+    locked_ext["locked_ending_form"] = locked_src.get("locked_ending_form", "")
+    locked_ext["locked_creator_questions"] = locked_src.get("locked_creator_questions", "")
+    
+    # 5종 중 값이 있는 것만 locked_items 텍스트로 조합
+    locked_lines = []
+    label_map = {
+        "locked_core_decisions": "핵심 결정",
+        "locked_music_rules": "음악 규약",
+        "locked_visual_motifs": "시각 모티프",
+        "locked_ending_form": "결말 형식",
+        "locked_creator_questions": "작가 결정 사항",
+    }
+    for k, label in label_map.items():
+        val = locked_ext[k]
+        if val:
+            if isinstance(val, list):
+                val = " / ".join(str(v) for v in val)
+            elif isinstance(val, dict):
+                val = " / ".join(f"{kk}: {vv}" for kk, vv in val.items() if vv)
+            locked_lines.append(f"[{label}] {val}")
+    
+    result["locked_5_extended"] = "\n".join(locked_lines)
+
     return result
 
 
@@ -559,6 +591,11 @@ S#번호. INT./EXT. 장소 — 시간
 
 GENRE_RULES = {
     "범죄/스릴러": {
+        # ─── v1.8: 본질 3중 선언 (Creator v2.5.5 동기화) ───
+        "absolute_goal": "스릴러는 정보의 비대칭이 만드는 긴장으로 관객을 압도해야 한다",
+        "fun_engine": "정보비대칭",
+        "emotion_triggers": ['의심', '배신', '타락'],
+        # ───────────────────────────────────────────
         "en": "Crime / Thriller / Noir Series",
         "core": "정보 비대칭과 압박, 도덕적 모호함 속 타락과 생존 대가.",
         "engine": "사건 엔진 + 비밀 엔진 — 매 회 수사 진전, 용의자/증거, 동맹과 배신의 경계 이동",
@@ -581,6 +618,11 @@ GENRE_RULES = {
         "forbidden": "수사관의 독백으로 사건 정리, 우연의 단서 발견, 도덕적 명확성",
     },
     "드라마": {
+        # ─── v1.8: 본질 3중 선언 (Creator v2.5.5 동기화) ───
+        "absolute_goal": "드라마는 관계의 깊이에서 오는 공감대를 만들어야 한다",
+        "fun_engine": "내면변화",
+        "emotion_triggers": ['억눌림', '균열', '폭발'],
+        # ───────────────────────────────────────────
         "en": "Drama Series",
         "core": "인간의 선택과 대가를 통해 관계의 진실에 도달하는 장르.",
         "engine": "관계 엔진 — 매 회 관계의 균열·복원·변화",
@@ -603,6 +645,11 @@ GENRE_RULES = {
         "forbidden": "감정을 직접 말하는 대사 (Too Wet), 갈등 없는 화해",
     },
     "액션": {
+        # ─── v1.8: 본질 3중 선언 (Creator v2.5.5 동기화) ───
+        "absolute_goal": "액션은 물리적 쾌감과 감정적 카타르시스를 동시에 줘야 한다",
+        "fun_engine": "전술변주",
+        "emotion_triggers": ['위기', '돌파', '대가'],
+        # ───────────────────────────────────────────
         "en": "Action Series",
         "core": "물리적 목표와 대가 속에서 캐릭터 의지를 증명하는 장르.",
         "engine": "사건 엔진 — 매 회 미션/작전이 에스컬레이션",
@@ -625,6 +672,11 @@ GENRE_RULES = {
         "forbidden": "설명으로 처리하는 액션, 무의미한 총격전 반복, 빌런의 동기 없는 폭력",
     },
     "코미디": {
+        # ─── v1.8: 본질 3중 선언 (Creator v2.5.5 동기화) ───
+        "absolute_goal": "코미디는 캐릭터의 결함이 만드는 반복 사고로 웃음을 줘야 한다",
+        "fun_engine": "코믹결함",
+        "emotion_triggers": ['오해', '에스컬레이션', '역전'],
+        # ───────────────────────────────────────────
         "en": "Comedy Series",
         "core": "웃음 메커니즘이 작동하는 장르. 떠드는 장르가 아니다.",
         "engine": "관계 엔진 + 사건 엔진 — 매 회 캐릭터 결함이 새로운 사고를 친다",
@@ -647,6 +699,11 @@ GENRE_RULES = {
         "forbidden": "상황 설명으로 웃기려는 시도, 같은 개그 반복, 인물 비하로 웃음 유발",
     },
     "호러/공포": {
+        # ─── v1.8: 본질 3중 선언 (Creator v2.5.5 동기화) ───
+        "absolute_goal": "호러는 규칙 위반이 주는 서늘함으로 안전감을 체계적으로 파괴해야 한다",
+        "fun_engine": "공포규칙",
+        "emotion_triggers": ['위반', '균열', '잔여공포'],
+        # ───────────────────────────────────────────
         "en": "Horror Series",
         "core": "공포의 예감과 축적으로 안전감을 체계적으로 파괴하는 장르.",
         "engine": "비밀 엔진 + 규칙 발견 — 매 회 공포의 규칙이 하나씩 드러남",
@@ -665,6 +722,11 @@ GENRE_RULES = {
         "forbidden": "공포 원인의 과잉 설명, jump scare만 반복",
     },
     "SF": {
+        # ─── v1.8: 본질 3중 선언 (Creator v2.5.5 동기화) ───
+        "absolute_goal": "SF는 세계관의 규칙이 인간 드라마의 은유로 작동해야 한다",
+        "fun_engine": "아이디어딜레마",
+        "emotion_triggers": ['경이', '대가', '선택'],
+        # ───────────────────────────────────────────
         "en": "Science Fiction Series",
         "core": "세계의 규칙이 인간 드라마의 은유로 작동하는 장르.",
         "engine": "세계 엔진 — 매 회 세계관의 새로운 층이 열림",
@@ -687,6 +749,11 @@ GENRE_RULES = {
         "forbidden": "세계관 설명 강의, 대가 없는 능력, 데우스 엑스 마키나",
     },
     "판타지": {
+        # ─── v1.8: 본질 3중 선언 (Creator v2.5.5 동기화) ───
+        "absolute_goal": "판타지는 경이(wonder)가 테마로 작동하며 내면 성장과 연결되어야 한다",
+        "fun_engine": "경이와성장",
+        "emotion_triggers": ['경이', '시련', '각성'],
+        # ───────────────────────────────────────────
         "en": "Fantasy Series",
         "core": "마법의 규칙과 대가가 인간 성장의 은유로 작동하는 장르.",
         "engine": "세계 엔진 — 매 회 세계관의 새로운 층이 열림",
@@ -709,6 +776,11 @@ GENRE_RULES = {
         "forbidden": "대가 없는 만능 마법, 예언에 의한 수동적 전개, 악의 동기 없는 빌런",
     },
     "로맨스/멜로": {
+        # ─── v1.8: 본질 3중 선언 (Creator v2.5.5 동기화) ───
+        "absolute_goal": "로맨스는 갈망의 축적과 감정의 지연이 만드는 아픔과 회수를 줘야 한다",
+        "fun_engine": "갈망진동",
+        "emotion_triggers": ['끌림', '어긋남', '합치'],
+        # ───────────────────────────────────────────
         "en": "Romance / Melodrama Series",
         "core": "갈망의 축적과 감정의 지연이 만드는 아픔과 회수의 장르.",
         "engine": "관계 엔진 — 매 회 두 사람의 거리가 진동",
@@ -731,6 +803,11 @@ GENRE_RULES = {
         "forbidden": "오해가 대화 한 마디로 해결, 삼각관계 기계적 반복",
     },
     "미스터리": {
+        # ─── v1.8: 본질 3중 선언 (Creator v2.5.5 동기화) ───
+        "absolute_goal": "미스터리는 관객이 추리에 참여하는 쾌감을 줘야 한다",
+        "fun_engine": "퍼즐해결",
+        "emotion_triggers": ['단서', '모순', '연결'],
+        # ───────────────────────────────────────────
         "en": "Mystery Series",
         "core": "진실에 대한 탐색이 인물과 세계를 변화시키는 장르.",
         "engine": "비밀 엔진 — 매 회 퍼즐 조각이 하나씩 맞춰지며 더 큰 미스터리가 열림",
@@ -765,9 +842,22 @@ def _genre_text(genre: str) -> str:
 
     must_have_detail = "\n".join(f"  - {m}" for m in r.get("must_have", []))
 
+    # v1.8: 본질 3중 선언 최상단 출력
+    abs_goal = r.get("absolute_goal", "")
+    fun_eng = r.get("fun_engine", "")
+    emo_trigs = r.get("emotion_triggers", [])
+    essence_block = ""
+    if abs_goal:
+        essence_block = (
+            f"★ 장르 본질: {abs_goal} ★\n"
+            f"  재미 엔진: [{fun_eng}]\n"
+            f"  감정 트리거: {' / '.join(emo_trigs)}\n\n"
+        )
+
     return (
         f"[GENRE RULE: {genre} ({r['en']})]\n"
         f"\n"
+        f"{essence_block}"
         f"핵심 원칙: {r['core']}\n"
         f"시리즈 엔진: {r.get('engine', '')}\n"
         f"시즌 질문: {r.get('season_q', '')}\n"
@@ -797,6 +887,195 @@ def _genre_text(genre: str) -> str:
     )
 
 
+
+
+
+
+# ═══════════════════════════════════════════════════════════
+# 시즌·회별 본질 검증 + 클리프행어 장르 정합성 (v1.8 신규)
+# ═══════════════════════════════════════════════════════════
+
+ESSENCE_EPISODE_CHECK = """
+[시리즈 본질 검증 — 매 회 자가 점검]
+
+★ 시리즈는 영화보다 본질 유지가 훨씬 어렵다. 회별로 본질이 흔들리면 시즌 전체가 무너진다. ★
+
+[회 단위 검증 — 매 비트 집필 후]
+□ 이 비트가 [absolute_goal]을 향해 한 걸음 나아가는가?
+□ 이 비트에서 [emotion_triggers] 3요소 중 최소 1개가 작동하는가?
+□ [fun_engine]이 이 비트에서 살아있는가?
+
+[클리프행어 장르 정합성 — Beat 7 전용]
+□ 이 클리프행어가 [장르 본질]에 부합하는가?
+□ 다른 장르 시리즈의 클리프행어로 옮겨도 성립하는가? → 성립하면 장르 실패.
+□ 이 클리프행어가 [emotion_triggers] 중 어떤 요소를 작동시키는가?
+
+[시리즈 특화 결함 패턴 — 자가 진단]
+① 장르 드리프트: 회가 갈수록 다른 장르로 흘러가고 있지 않은가?
+② 장르 약화: [emotion_triggers]가 후반에 사라지고 있지 않은가?
+③ 클리프행어 미스매치: 클리프행어가 매번 장르와 어긋나지 않는가?
+④ 본질 누락: 시즌 피날레가 [absolute_goal]에 도달할 수 있는가?
+""".strip()
+
+
+def get_essence_check(genre: str) -> str:
+    """장르의 본질 3중 선언을 포함한 회별 검증 블록 반환."""
+    r = GENRE_RULES.get(genre, {})
+    abs_goal = r.get("absolute_goal", "(본질 미정의)")
+    fun_eng = r.get("fun_engine", "(미정의)")
+    triggers = r.get("emotion_triggers", [])
+    triggers_str = " / ".join(triggers) if triggers else "(미정의)"
+    
+    return f"""
+[본질 3중 선언 — 이 시리즈의 장르 약속]
+  absolute_goal: {abs_goal}
+  fun_engine: [{fun_eng}]
+  emotion_triggers: {triggers_str}
+
+{ESSENCE_EPISODE_CHECK}
+""".strip()
+
+
+
+# ═══════════════════════════════════════════════════════════
+# BJND 4축 시리즈 검증 (v1.8 — Creator v2.5.0 동기화)
+# ═══════════════════════════════════════════════════════════
+
+BJND_SERIES_VALIDATION = """
+[BJND 4축 시리즈 검증]
+
+시리즈 주인공은 시즌 단위로 BJND 4축이 작동해야 한다.
+
+[4축 정의]
+  N — NECESSITY (필연성): 이 주인공이 이 이야기를 겪어야 하는 필연적 이유
+  A — AUTHENTICITY (진정성): 관객이 '저 사람의 세계를 믿는다'고 느끼는 정도
+  E — EMPATHY (공감): 관객이 주인공의 선택에 감정적으로 동참하는 정도
+  P — POTENCY (잠재력): 주인공의 행동이 이야기를 움직이는 힘
+
+[시즌 단위 설계]
+  □ NECESSITY: 시즌 1화에서 '왜 이 사람인가'가 설정되었는가?
+  □ AUTHENTICITY: 매 회 직업/관계/일상 디테일이 유지되는가?
+  □ EMPATHY: 시즌 중반까지 관객이 주인공 편에 서게 만드는 순간이 있는가?
+  □ POTENCY: 시즌 피날레에서 주인공의 선택이 세계를 바꾸는가?
+
+[Strategy 전환 — 시즌 아크 핵심]
+  Strategy_1 (1막~미드포인트): 주인공의 첫 번째 전략. 대개 실패한다.
+  Strategy_2 (미드포인트~피날레): 전환된 전략. Need를 인식한 후의 접근법.
+  전환 시점: 시즌 미드포인트(EP4) 또는 최저점(EP6).
+
+[Cost 누적 — 회별 추적]
+  매 회 관계/자기/세계 3축 중 어느 축이 손상되는가?
+  Cost가 누적되지 않으면 클라이맥스에서 카타르시스가 없다.
+""".strip()
+
+
+# ═══════════════════════════════════════════════════════════
+# 장르 강제 체크 (Genre Enforcement — Writer Engine v2.2 동기화)
+# 비트 집필 후 자가 검증용. Override와 달리 짧고 효과적.
+# ═══════════════════════════════════════════════════════════
+
+def _is_comedy(genre: str) -> bool:
+    g = genre.lower()
+    return "코미디" in g or "comedy" in g or "롬코" in g
+
+def _is_horror(genre: str) -> bool:
+    g = genre.lower()
+    return "호러" in g or "공포" in g or "horror" in g
+
+def _is_romance(genre: str) -> bool:
+    g = genre.lower()
+    return "로맨스" in g or "멜로" in g or "romance" in g or "롬코" in g or "로맨틱" in g
+
+def _is_action(genre: str) -> bool:
+    g = genre.lower()
+    return "액션" in g or "action" in g
+
+def _is_drama(genre: str) -> bool:
+    g = genre.lower()
+    return "드라마" in g or "drama" in g
+
+def _is_thriller(genre: str) -> bool:
+    g = genre.lower()
+    if _is_horror(genre):
+        return False
+    return "스릴러" in g or "thriller" in g or "범죄" in g or "crime" in g
+
+def _resolve_genre_dna(genre: str) -> str:
+    """복합 장르 법칙: 두 번째 장르 = 본질. 본질 장르를 반환."""
+    g = genre.lower()
+    if _is_comedy(genre) and _is_romance(genre):
+        return "comedy"
+    if _is_comedy(genre): return "comedy"
+    if _is_horror(genre): return "horror"
+    if _is_thriller(genre): return "thriller"
+    if _is_action(genre): return "action"
+    if _is_romance(genre): return "romance"
+    if _is_drama(genre): return "drama"
+    return "drama"
+
+
+ROMCOM_ENFORCEMENT = """
+★★★ 로맨틱 코미디 — 매 비트 장르 강제 체크 ★★★
+□ 웃음 밀도: 관객이 웃는 순간이 최소 2개 있는가?
+□ 대사 비중 50%+: 지문 연속 3문장 금지. 대사와 지문 교차.
+□ 신체 언어: 로맨스 씬에서 거리/시선/접촉이 명시되는가?
+□ 코믹 결함: 주인공의 comic flaw가 이 비트에서 작동하는가?
+□ 장르 분리: 이 비트를 드라마/스릴러에 넣어도 되면 장르 실패.
+→ 2개 이상 No면 다시 써라.
+""".strip()
+
+DRAMA_ENFORCEMENT = """
+★ 드라마 — 매 비트 장르 강제 체크 ★
+□ 내적 목적: 외적 목적(무엇을 하는가) + 내적 목적(감정적으로 무엇이 일어나는가) 분리?
+□ 감정 억제: 폭발 씬은 시즌 전체에서 2~3번만. 지금이 아니면 눌러라.
+□ 구체 소품: 감정이 추상어가 아닌 소품·공간·행동으로 표현되는가?
+□ 인물 아크: Want/Need가 이 비트에서 한 걸음 움직였는가?
+→ 2개 이상 No면 다시 써라.
+""".strip()
+
+THRILLER_ENFORCEMENT = """
+★ 스릴러 — 매 비트 장르 강제 체크 ★
+□ 정보 비대칭: 관객/주인공/빌런 각각이 아는 것의 간극이 작동하는가?
+□ 시계 장치: 남은 시간·자원·기회가 줄었는가?
+□ 도덕선 이동: 주인공의 도덕적 경계가 이전 비트보다 후퇴했는가?
+□ 물리적 위협: 위협이 추상적 불안이 아니라 구체적 행동으로 드러나는가?
+→ 2개 이상 No면 다시 써라.
+""".strip()
+
+HORROR_ENFORCEMENT = """
+★ 호러 — 매 비트 장르 강제 체크 ★
+□ 가짜 안도: 이 비트에 false relief가 최소 1회 있는가?
+□ 감각 서술: 시각 전에 소리/온도/냄새가 먼저 오는가?
+□ 규칙 작동: 이 공포의 규칙이 이 비트에서 유지/위반되는가?
+□ 잔여 공포: 비트 끝에 "아직 끝나지 않았다"는 불안이 남는가?
+→ 2개 이상 No면 다시 써라.
+""".strip()
+
+ACTION_ENFORCEMENT = """
+★ 액션 — 매 비트 장르 강제 체크 ★
+□ 공간 지리: 전투/추격 공간의 구조가 관객에게 보이는가?
+□ 전술 변화: 직전 액션 비트와 다른 전술/환경인가?
+□ 물리적 대가: 액션 후 몸에 대가가 남는가?
+□ 에스컬레이션: 이전 액션보다 규모/난이도가 올라갔는가?
+→ 2개 이상 No면 다시 써라.
+""".strip()
+
+
+def get_genre_enforcement(genre: str) -> str:
+    """장르별 매 비트 강제 체크 블록 반환."""
+    dna = _resolve_genre_dna(genre)
+    if dna == "comedy":
+        return ROMCOM_ENFORCEMENT
+    elif dna == "romance":
+        return ROMCOM_ENFORCEMENT
+    elif dna == "thriller":
+        return THRILLER_ENFORCEMENT
+    elif dna == "horror":
+        return HORROR_ENFORCEMENT
+    elif dna == "action":
+        return ACTION_ENFORCEMENT
+    else:
+        return DRAMA_ENFORCEMENT
 
 
 # ═══════════════════════════════════════════════════════════
@@ -912,6 +1191,55 @@ def summarize_episode_context(episode_beats: dict, ep: int) -> str:
     return "\n".join(parts) if parts else ""
 
 
+
+# ═══════════════════════════════════════════════════════════
+# OPENING MASTERY — EP1 콜드 오프닝 전용 (Writer Engine v2.2 이식)
+# ═══════════════════════════════════════════════════════════
+
+OPENING_MASTERY_MODULE = """
+[OPENING MASTERY — EP1 첫 3분 도파민 설계]
+
+★ EP1 콜드 오프닝 = 시리즈 전체의 약속. 이 약속이 장르와 일치하지 않으면 관객은 시즌 내내 기대가 어긋난다. ★
+★ 2020년 이후 관객은 첫 3분 안에 시리즈를 판단한다. OTT 스킵 습관 + 숏폼 세대. ★
+
+[오프닝 6기법]
+① Action Drop — 이미 진행 중인 액션 안으로 떨어뜨리기
+② Cold Open — 본편과 다른 시점/장면으로 시작 후 본편 진입
+③ Tease & Reveal — 수수께끼 이미지로 시작, 시즌 후반에 회수
+④ In Media Res — 미래의 결정적 순간 먼저, 역추적
+⑤ Character Reveal Action — 주인공을 정의하는 첫 행동/선택
+⑥ Hook Dialogue — 강렬한 한 줄 대사로 시작
+
+[복합 장르 법칙]
+두 번째 장르 = 작품의 본질. 오프닝은 본질 쪽의 DNA를 선언한다.
+로맨틱 코미디 = 코미디 DNA / 액션 스릴러 = 스릴러 DNA / SF 드라마 = 드라마 DNA
+
+[장르별 오프닝 DNA]
+호러 → Tease & Reveal / Cold Open. 첫 3분 안에 '뭔가 이상하다'를 느끼게.
+액션 → Action Drop / Character Reveal Action. 첫 씬이 현재 진행형 동작으로 시작.
+코미디 → Character Reveal Action / Hook Dialogue. 주인공의 코믹 결함이 3분 안에 사고.
+스릴러 → Cold Open / In Media Res. 정보 비대칭 즉시 시작.
+드라마 → Tease & Reveal / Character Reveal Action. 고요한 균열.
+로맨스 → Character Reveal Action. 주인공의 갈망이 드러나는 첫 행동.
+SF → Cold Open. 세계가 다르다는 것을 첫 이미지로.
+판타지 → Tease & Reveal. 문턱 넘기의 전조.
+
+[도파민 포인트 — 첫 3분 안에 최소 1회]
+관객의 뇌에 '이 시리즈 볼 만하다'를 새기는 순간.
+- 예상을 깨는 행동/반전 (기대와 다른 전개)
+- 강렬한 시각적 이미지 (기억에 남는 한 컷)
+- 긴장 또는 웃음 (감정 반응 유발)
+- 미스터리/질문 (답을 알고 싶은 욕구)
+
+★ 오프닝 도파민 ≠ 도발적 사건(inciting incident). 도파민은 '관객의 관심을 잡는 것', 도발적 사건은 '이야기를 출발시키는 것'. 둘은 다르다. ★
+"""
+
+
+def get_opening_mastery(genre: str) -> str:
+    """EP1 Beat 0 전용: OPENING MASTERY 모듈 + 장르별 권장 기법을 반환."""
+    return OPENING_MASTERY_MODULE
+
+
 # ═══════════════════════════════════════════════════════════
 # 1. 시즌 아크 설계
 # ═══════════════════════════════════════════════════════════
@@ -993,11 +1321,21 @@ EP1 → EP{num_episodes} 판돈 상승 경로.
 최소 6개 Plant-Payoff 쌍 (캐릭터/관계/세계관 각 2개 이상):
 - Plant 1: [내용] — EP? Beat ? → Payoff: EP? Beat ? — [회수 방식]
 
-### 11. 캐릭터 부족 진단
+### 11. BJND 4축 시즌 설계
+주인공의 BJND 4축(NECESSITY/AUTHENTICITY/EMPATHY/POTENCY):
+- 각 축이 시즌 내에서 어떻게 작동하는가?
+- Strategy_1 → Strategy_2 전환 시점은?
+- Cost 누적 계획: 매 회 관계/자기/세계 중 어느 축이 손상되는가?
+
+### 12. 캐릭터 부족 진단
 - 부족한 역할 (B-Story 전용 인물, 에피소드 게스트, 와일드카드)
 - 추천 추가 인물 2~3명 (역할명 + 간략 설명)
 
-한국어로, 시나리오 전문 작가의 언어로."""
+한국어로, 시나리오 전문 작가의 언어로.
+
+[출력 주의]
+모든 출력은 마크다운 형식으로. JSON 출력이 요구될 경우 JSON_OUTPUT_RULES 9개를 준수하라.
+string value 안에 줄바꿈/탭/역슬래시 절대 금지."""
 
 
 
@@ -1107,6 +1445,14 @@ EP{ep_num}의 씬 플랜을 분석하여, 이 에피소드에서 필요하지만
 - 반전 카메오: 예상 못한 인물이 예상 못한 장소에 나타나서 판을 뒤집는다.
 - 감초 카메오: 장르적 쾌감만을 위한 등장. 코미디에서 특히 효과적.
 ★ 카메오가 서사에 아무 영향을 주지 않으면 팬서비스일 뿐이다. 반드시 1개 이상의 서사적 기능을 명시하라.
+
+[캐릭터 분류 × 장르 본질 연동 — v1.8 필수 검증]
+회별 캐릭터 작성 시 다음을 자가 검증하라:
+□ RECURRING — 시즌 [fun_engine]의 누적이 이 인물에 새겨지는가?
+□ GUEST — 이 게스트가 그 회의 [emotion_triggers] 중 어떤 요소를 작동시키는가?
+□ CAMEO — 카메오의 출현이 장르적 쾌감(서프라이즈)에 부합하는가?
+□ FUNCTIONAL — 단순 기능성 인물이라도 장르 톤을 깨지 않는가?
+★ 게스트 캐릭터는 단순 새 얼굴이 아니라 그 회의 장르 본질을 작동시키는 도구다.
 
 [출력]
 
@@ -1392,6 +1738,8 @@ def build_write_episode_beat_prompt(
     episode_context_summary: str = "",
 ) -> str:
     gr = _genre_text(genre)
+    genre_enforcement = get_genre_enforcement(genre)
+    essence_check = get_essence_check(genre)
     beat_info = EPISODE_BEATS[beat_num] if beat_num < len(EPISODE_BEATS) else EPISODE_BEATS[-1]
     target = EP_SCENE_TARGETS.get(duration, EP_SCENE_TARGETS[50])
 
@@ -1428,12 +1776,15 @@ def build_write_episode_beat_prompt(
     if beat_num == 0:
         genre_data = GENRE_RULES.get(genre, {})
         opening_strategy = genre_data.get("opening", "")
+        # v1.7.1: EP1 Beat 0에만 OPENING MASTERY 주입
+        opening_mastery = get_opening_mastery(genre) if ep_num == 1 else ""
         cold_open_block = f"""
 [⚡ 콜드 오프닝 특별 지시 — Beat 0 전용]
 타이틀 전 시퀀스. 2~5분 분량.
 관객을 즉시 잡는 훅으로 시작하라.
 
 오프닝 전략: {opening_strategy}
+{opening_mastery}
 
 [콜드 오프닝 규칙]
 - 첫 씬의 첫 3줄이 관객의 호기심을 잡아야 한다. 설명으로 시작하지 마라.
@@ -1659,6 +2010,10 @@ EP{ep_num} — Beat {beat_num}. {beat_info['name']}
 - ⭐ 액션 아이디어 전진: 전진/방해/무관
 - ⭐ 서사동력: Goal 추구 / Need 인식 / 간극 상태
 - AI ESCAPE 점검: A1~A16 중 위반 항목
+- ⭐ 장르 강제 체크 (Genre Enforcement):
+{genre_enforcement}
+- ⭐ 본질 검증 (v1.8):
+{essence_check}
 """.strip()
 
 
@@ -1731,6 +2086,8 @@ def build_structural_rewrite_prompt(
     후속 에피소드(EP5~8)와의 연속성을 유지한다."""
 
     gr = _genre_text(genre)
+    genre_enforcement = get_genre_enforcement(genre)
+    essence_check = get_essence_check(genre)
     beat_info = EPISODE_BEATS[beat_num] if beat_num < len(EPISODE_BEATS) else EPISODE_BEATS[-1]
     char_block = character_bible[:4000] if character_bible else ""
 
@@ -1831,4 +2188,169 @@ def build_structural_rewrite_prompt(
 
 [AI ESCAPE 점검]
 - A1~A16 중 위반 항목
+""".strip()
+
+
+# ═══════════════════════════════════════════════════════════
+# Creator Engine JSON → Series Engine 필드 변환 (v1.7.1 신규)
+# ═══════════════════════════════════════════════════════════
+
+def extract_from_creator_json_series(creator_json: dict) -> dict:
+    """
+    Creator Engine v2.3+ JSON을 받아 Series Engine 9칸 입력 필드로 변환.
+    Writer Engine의 extract_from_creator_json과 동일 로직이지만 시리즈 필드명 매핑.
+    """
+    result = {k: "" for k in [
+        "logline", "intention", "gns", "characters",
+        "world", "structure", "scenes", "treatment", "tone",
+        "title",
+    ]}
+
+    if not creator_json:
+        return result
+
+    p = creator_json.get("project", creator_json)
+    result["title"] = p.get("title", "")
+
+    core = p.get("core", {}) or {}
+
+    # 로그라인
+    logline_pack = core.get("logline_pack", {}) or {}
+    if isinstance(logline_pack, dict):
+        result["logline"] = (logline_pack.get("washed", "") or
+                             logline_pack.get("original", "") or
+                             logline_pack.get("investor", ""))
+    elif isinstance(logline_pack, str):
+        result["logline"] = logline_pack
+
+    # 기획의도
+    intent_src = core.get("project_intent") or core.get("key_points") or {}
+    if isinstance(intent_src, dict):
+        result["intention"] = "\n".join(f"{k}: {v}" for k, v in intent_src.items() if v)
+    elif isinstance(intent_src, str):
+        result["intention"] = intent_src
+
+    # GNS + 서사동력
+    gns_src = core.get("goal_need_strategy", {}) or {}
+    nd = core.get("narrative_drive", {}) or {}
+    gns_lines = []
+    if isinstance(gns_src, dict):
+        for k, v in gns_src.items():
+            if v:
+                gns_lines.append(f"[{k}] {v}")
+    if isinstance(nd, dict):
+        for k in ["desire_origin", "origin_detail", "arc_direction",
+                  "resolution_strategy", "goal_need_gap"]:
+            v = nd.get(k)
+            if v:
+                gns_lines.append(f"[{k}] {v}")
+    result["gns"] = "\n".join(gns_lines)
+
+    # 캐릭터 + 바이블
+    chars = core.get("characters", {}) or {}
+    char_bible = core.get("character_bible", {}) or {}
+    ext_chars = core.get("extended_characters", {}) or {}
+    char_parts = []
+    if isinstance(chars, dict):
+        for role, data in chars.items():
+            if isinstance(data, dict):
+                name = data.get("name", role)
+                char_parts.append(f"[{role}] {name}")
+                for field in ["goal", "need", "secret", "tactics", "speech_pattern", "sample_lines"]:
+                    val = data.get(field)
+                    if val:
+                        char_parts.append(f"  {field}: {val}")
+            elif isinstance(data, str):
+                char_parts.append(f"[{role}] {data}")
+    if isinstance(ext_chars, dict):
+        for role, data in ext_chars.items():
+            if isinstance(data, dict):
+                name = data.get("name", role)
+                char_parts.append(f"[ext:{role}] {name}")
+                for field in ["goal", "need", "secret", "tactics", "speech_pattern"]:
+                    val = data.get(field)
+                    if val:
+                        char_parts.append(f"  {field}: {val}")
+    if isinstance(char_bible, dict):
+        for name, bible in char_bible.items():
+            if isinstance(bible, dict):
+                char_parts.append(f"\n[바이블: {name}]")
+                for k, v in bible.items():
+                    if v:
+                        char_parts.append(f"  {k}: {v}")
+    result["characters"] = "\n".join(char_parts)
+
+    # 세계관
+    world = core.get("world_build") or core.get("world", {}) or {}
+    if isinstance(world, dict):
+        result["world"] = "\n".join(f"{k}: {v}" for k, v in world.items() if v)
+    elif isinstance(world, str):
+        result["world"] = world
+
+    # 구조
+    structure = core.get("structure") or core.get("synopsis", {}) or {}
+    if isinstance(structure, dict):
+        result["structure"] = "\n".join(f"{k}: {v}" for k, v in structure.items() if v)
+    elif isinstance(structure, str):
+        result["structure"] = structure
+
+    # 장면 설계
+    scenes = core.get("scene_design") or core.get("key_scenes", {}) or {}
+    if isinstance(scenes, dict):
+        result["scenes"] = "\n".join(f"{k}: {v}" for k, v in scenes.items() if v)
+    elif isinstance(scenes, str):
+        result["scenes"] = scenes
+
+    # 트리트먼트
+    treatment = p.get("treatment") or core.get("treatment", {}) or {}
+    if isinstance(treatment, dict):
+        parts = []
+        for act_key in sorted(treatment.keys()):
+            parts.append(f"[{act_key}]\n{treatment[act_key]}")
+        result["treatment"] = "\n\n".join(parts)
+    elif isinstance(treatment, str):
+        result["treatment"] = treatment
+
+    # 톤 문서
+    tone = p.get("tone_document") or core.get("tone", {}) or {}
+    if isinstance(tone, dict):
+        result["tone"] = "\n".join(f"{k}: {v}" for k, v in tone.items() if v)
+    elif isinstance(tone, str):
+        result["tone"] = tone
+
+    return result
+
+
+# ═══════════════════════════════════════════════════════════
+# JSON 파싱 안정화 (v1.8 — Creator v2.5.1/v2.5.4 패턴)
+# ═══════════════════════════════════════════════════════════
+
+import re as _re
+
+def sanitize_json_string(raw: str) -> str:
+    """모델 출력의 JSON을 파싱 가능하게 정리."""
+    # 코드 펜스 제거
+    text = raw.strip()
+    if text.startswith("```"):
+        text = _re.sub(r"^```(?:json)?\s*", "", text)
+        text = _re.sub(r"```\s*$", "", text)
+    # string value 내부 제어 문자 → 공백
+    text = text.replace("\r\n", " ").replace("\r", " ")
+    text = _re.sub(r"(?<!\\)\t", " ", text)
+    # trailing comma 제거
+    text = _re.sub(r",\s*([}\]])", r"\1", text)
+    return text.strip()
+
+
+JSON_OUTPUT_RULES = """
+[JSON 출력 강제 규칙 — 9개]
+1. 단일 JSON 객체만 출력. 코드 펜스·설명 텍스트 금지.
+2. 모든 key는 쌍따옴표(").
+3. 모든 string value는 쌍따옴표(").
+4. string value 안의 인용은 작은따옴표(') — 쌍따옴표 금지.
+5. string value 안에 줄바꿈(\n)/탭(\t)/캐리지리턴(\r) 절대 금지.
+6. string value 안에 역슬래시(\\) 금지.
+7. 후행 쉼표(trailing comma) 금지.
+8. ```json 펜스로 감싸지 말 것.
+9. 출력 시작 "{" / 출력 끝 "}".
 """.strip()
