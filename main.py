@@ -1019,6 +1019,8 @@ with st.expander("⚡ Creator Engine JSON 업로드 (자동 채우기)", expande
             for key, _, _ in INPUT_FIELDS:
                 if loaded.get(key):
                     st.session_state["inputs"][key] = loaded[key]
+                    # Streamlit 위젯 key 동기화 — rerun 후 text_area가 자기 key 값을 우선시하므로 함께 갱신
+                    st.session_state[f"input_{key}"] = loaded[key]
 
             # v1.8: LOCKED 5종 확장 — Creator JSON에서 추출된 LOCKED 항목 자동 추가
             locked_ext = loaded.get("locked_5_extended", "")
@@ -1030,6 +1032,8 @@ with st.expander("⚡ Creator Engine JSON 업로드 (자동 채우기)", expande
                     if item not in existing:
                         existing.append(item)
                 st.session_state["locked_items"] = existing
+                # 위젯 key 동기화
+                st.session_state["locked_input"] = "\n".join(existing)
 
             # 메타 정보
             meta = creator_data.get("_meta", {})
@@ -1560,6 +1564,21 @@ def _import_session_backup(raw_bytes: bytes) -> dict:
             if k in ["episode_plans", "ep_characters"] and isinstance(v, dict):
                 v = {int(kk): vv for kk, vv in v.items()}
             st.session_state[k] = v
+
+    # ★ Streamlit 위젯 key 동기화 — text_area 위젯이 자기 key 값을 우선시하므로 함께 갱신
+    # 9칸 입력 영역
+    inputs_restored = session_data.get("inputs", {})
+    if isinstance(inputs_restored, dict):
+        for ik, iv in inputs_restored.items():
+            if iv:
+                st.session_state[f"input_{ik}"] = iv
+    # LOCKED / OPEN 입력 영역
+    locked_restored = session_data.get("locked_items", [])
+    if isinstance(locked_restored, list) and locked_restored:
+        st.session_state["locked_input"] = "\n".join(locked_restored)
+    open_restored = session_data.get("open_items", [])
+    if isinstance(open_restored, list) and open_restored:
+        st.session_state["open_input"] = "\n".join(open_restored)
 
     return meta
 
