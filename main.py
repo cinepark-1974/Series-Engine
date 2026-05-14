@@ -768,7 +768,8 @@ if mode == "🔄 리라이트":
 
     col_ep, col_bt = st.columns(2)
     with col_ep:
-        rw_ep_num = st.number_input("에피소드 번호", min_value=1, max_value=12, value=1, key="rw_ep_num")
+        st.session_state.setdefault("rw_ep_num", 1)
+        rw_ep_num = st.number_input("에피소드 번호", min_value=1, max_value=12, key="rw_ep_num")
     with col_bt:
         rw_beat_num = st.selectbox(
             "비트 번호",
@@ -953,9 +954,12 @@ with st.expander("🔒 설정 잠금 (LOCKED / OPEN)", expanded=False):
     )
     col_lock, col_open = st.columns(2)
     with col_lock:
+        # ★ v1.8 패치: value= 제거 → setdefault로 초기값 주입 (안티패턴 회피)
+        st.session_state.setdefault(
+            "locked_input", "\n".join(st.session_state["locked_items"])
+        )
         locked_input = st.text_area(
             "🔒 LOCKED (변경 불가)",
-            value="\n".join(st.session_state["locked_items"]),
             height=150,
             placeholder=(
                 "한 줄에 하나씩:\n"
@@ -966,9 +970,11 @@ with st.expander("🔒 설정 잠금 (LOCKED / OPEN)", expanded=False):
             key="locked_input",
         )
     with col_open:
+        st.session_state.setdefault(
+            "open_input", "\n".join(st.session_state["open_items"])
+        )
         open_input = st.text_area(
             "🟢 OPEN (창작 가능)",
-            value="\n".join(st.session_state["open_items"]),
             height=150,
             placeholder=(
                 "한 줄에 하나씩:\n"
@@ -993,7 +999,7 @@ INPUT_FIELDS = [
     ("tone",       "⑨ 톤 문서",            "Tone Document (시리즈 톤 지속성 규칙 포함)"),
 ]
 
-# ★ v1.7.1 — Creator Engine JSON 자동 로더
+# ★ v1.8 — Creator Engine JSON 자동 로더
 with st.expander("⚡ Creator Engine JSON 업로드 (자동 채우기)", expanded=False):
     st.markdown(
         '<div class="small-meta">Creator Engine에서 내려받은 .json 파일을 업로드하면 '
@@ -1060,10 +1066,15 @@ with st.expander("⚡ Creator Engine JSON 업로드 (자동 채우기)", expande
 with st.expander("📝 Creator Engine 결과 붙여넣기 (9칸)", expanded=not st.session_state["season_arc"]):
     for key, label, placeholder in INPUT_FIELDS:
         height = 200 if key == "characters" else 120
-        st.session_state["inputs"][key] = st.text_area(
-            label, value=st.session_state["inputs"][key],
-            height=height, placeholder=placeholder, key=f"input_{key}",
+        # ★ v1.8 패치: value= 제거 → setdefault로 초기값 주입 (안티패턴 회피)
+        widget_key = f"input_{key}"
+        st.session_state.setdefault(widget_key, st.session_state["inputs"][key])
+        st.text_area(
+            label,
+            height=height, placeholder=placeholder, key=widget_key,
         )
+        # 위젯 값 → inputs 딕셔너리 동기화 (다른 영역에서 inputs[key]를 직접 읽으므로 유지)
+        st.session_state["inputs"][key] = st.session_state[widget_key]
 
 
 # ══════════════════════════════════════════════
@@ -1512,7 +1523,7 @@ if has_any_beats:
 
 
 # ══════════════════════════════════════════════
-# ★ v1.7.1 — 프로젝트 세션 백업 (중단 시 복구)
+# ★ v1.8 — 프로젝트 세션 백업 (중단 시 복구)
 # ══════════════════════════════════════════════
 
 # 백업 대상 키
@@ -1533,7 +1544,7 @@ def _export_session_backup() -> bytes:
     payload = {
         "_meta": {
             "engine": "Series Engine",
-            "engine_version": "v1.7.1",
+            "engine_version": "v1.8",
             "saved_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
             "genre": st.session_state.get("genre", ""),
             "num_episodes": st.session_state.get("num_episodes", 8),
