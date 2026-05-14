@@ -535,6 +535,15 @@ for k, v in DEFAULTS.items():
             st.session_state[k] = v
 
 
+# ★ v1.8 패치: pending 위젯 동기화 처리
+# 백업 복원이나 Creator JSON 로드 후 rerun된 시점에 위젯 key를 안전하게 갱신.
+# 위젯이 그려지기 전(이 시점)이라 직접 수정 가능.
+_pending_sync = st.session_state.pop("_pending_widget_sync", None)
+if _pending_sync:
+    for _wk, _wv in _pending_sync.items():
+        st.session_state[_wk] = _wv
+
+
 # ──────────────────────────────────────────────
 # Stepper (5단계)
 # ──────────────────────────────────────────────
@@ -1021,12 +1030,14 @@ with st.expander("⚡ Creator Engine JSON 업로드 (자동 채우기)", expande
             creator_data = json.loads(raw)
             loaded = extract_from_creator_json_series(creator_data)
 
+            # ★ v1.8 패치: 위젯 key는 위에서 이미 그려졌을 수 있으므로 pending dict에 모음
+            pending = st.session_state.get("_pending_widget_sync", {}) or {}
+
             # 9칸 입력에 주입
             for key, _, _ in INPUT_FIELDS:
                 if loaded.get(key):
                     st.session_state["inputs"][key] = loaded[key]
-                    # Streamlit 위젯 key 동기화 — rerun 후 text_area가 자기 key 값을 우선시하므로 함께 갱신
-                    st.session_state[f"input_{key}"] = loaded[key]
+                    pending[f"input_{key}"] = loaded[key]
 
             # v1.8: LOCKED 5종 확장 — Creator JSON에서 추출된 LOCKED 항목 자동 추가
             locked_ext = loaded.get("locked_5_extended", "")
@@ -1038,8 +1049,11 @@ with st.expander("⚡ Creator Engine JSON 업로드 (자동 채우기)", expande
                     if item not in existing:
                         existing.append(item)
                 st.session_state["locked_items"] = existing
-                # 위젯 key 동기화
-                st.session_state["locked_input"] = "\n".join(existing)
+                # 위젯 key 동기화 (pending)
+                pending["locked_input"] = "\n".join(existing)
+
+            if pending:
+                st.session_state["_pending_widget_sync"] = pending
 
             # 메타 정보
             meta = creator_data.get("_meta", {})
@@ -1576,20 +1590,25 @@ def _import_session_backup(raw_bytes: bytes) -> dict:
                 v = {int(kk): vv for kk, vv in v.items()}
             st.session_state[k] = v
 
-    # ★ Streamlit 위젯 key 동기화 — text_area 위젯이 자기 key 값을 우선시하므로 함께 갱신
+    # ★ v1.8 패치: 위젯 key는 이미 그려진 상태라 직접 수정 불가.
+    # _pending_widget_sync에 모아두고 rerun 후 페이지 최상단에서 적용.
+    pending = {}
     # 9칸 입력 영역
     inputs_restored = session_data.get("inputs", {})
     if isinstance(inputs_restored, dict):
         for ik, iv in inputs_restored.items():
             if iv:
-                st.session_state[f"input_{ik}"] = iv
+                pending[f"input_{ik}"] = iv
     # LOCKED / OPEN 입력 영역
     locked_restored = session_data.get("locked_items", [])
     if isinstance(locked_restored, list) and locked_restored:
-        st.session_state["locked_input"] = "\n".join(locked_restored)
+        pending["locked_input"] = "\n".join(locked_restored)
     open_restored = session_data.get("open_items", [])
     if isinstance(open_restored, list) and open_restored:
-        st.session_state["open_input"] = "\n".join(open_restored)
+        pending["open_input"] = "\n".join(open_restored)
+
+    if pending:
+        st.session_state["_pending_widget_sync"] = pending
 
     return meta
 
