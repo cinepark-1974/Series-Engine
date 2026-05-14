@@ -2309,133 +2309,204 @@ def build_structural_rewrite_prompt(
 
 def extract_from_creator_json_series(creator_json: dict) -> dict:
     """
-    Creator Engine v2.3+ JSON을 받아 Series Engine 9칸 입력 필드로 변환.
-    Writer Engine의 extract_from_creator_json과 동일 로직이지만 시리즈 필드명 매핑.
+    Creator Engine v2.5+ JSON을 받아 Series Engine 9칸 입력 필드로 변환.
+    실제 Creator Engine v2.5.3 JSON 구조에 맞춰 정밀 파싱.
     """
     result = {k: "" for k in [
         "logline", "intention", "gns", "characters",
         "world", "structure", "scenes", "treatment", "tone",
-        "title",
+        "title", "locked_5_extended",
     ]}
-
     if not creator_json:
         return result
 
     p = creator_json.get("project", creator_json)
     result["title"] = p.get("title", "")
-
     core = p.get("core", {}) or {}
 
-    # 로그라인
-    logline_pack = core.get("logline_pack", {}) or {}
-    if isinstance(logline_pack, dict):
-        result["logline"] = (logline_pack.get("washed", "") or
-                             logline_pack.get("original", "") or
-                             logline_pack.get("investor", ""))
-    elif isinstance(logline_pack, str):
-        result["logline"] = logline_pack
+    # ── 로그라인 ──
+    lp = core.get("logline_pack", {}) or {}
+    if isinstance(lp, dict):
+        result["logline"] = lp.get("washed", "") or lp.get("original", "") or lp.get("investor", "")
+    elif isinstance(lp, str):
+        result["logline"] = lp
 
-    # 기획의도
-    intent_src = core.get("project_intent") or core.get("key_points") or {}
-    if isinstance(intent_src, dict):
-        result["intention"] = "\n".join(f"{k}: {v}" for k, v in intent_src.items() if v)
-    elif isinstance(intent_src, str):
-        result["intention"] = intent_src
+    # ── 기획의도 ──
+    intent = core.get("project_intent") or core.get("key_points") or {}
+    if isinstance(intent, dict):
+        result["intention"] = "\n".join(f"{k}: {v}" for k, v in intent.items() if v)
+    elif isinstance(intent, str):
+        result["intention"] = intent
 
-    # GNS + 서사동력
-    gns_src = core.get("goal_need_strategy", {}) or {}
+    # ── GNS + 서사동력 ──
+    gns = core.get("goal_need_strategy", {}) or {}
     nd = core.get("narrative_drive", {}) or {}
-    gns_lines = []
-    if isinstance(gns_src, dict):
-        for k, v in gns_src.items():
+    lines = []
+    if isinstance(gns, dict):
+        for k, v in gns.items():
             if v:
-                gns_lines.append(f"[{k}] {v}")
+                lines.append(f"[{k}] {v}")
     if isinstance(nd, dict):
         for k in ["desire_origin", "origin_detail", "arc_direction",
                   "resolution_strategy", "goal_need_gap"]:
             v = nd.get(k)
             if v:
-                gns_lines.append(f"[{k}] {v}")
-    result["gns"] = "\n".join(gns_lines)
+                lines.append(f"[{k}] {v}")
+    result["gns"] = "\n".join(lines)
 
-    # 캐릭터 + 바이블
-    chars = core.get("characters", {}) or {}
-    char_bible = core.get("character_bible", {}) or {}
-    ext_chars = core.get("extended_characters", {}) or {}
+    # ── 캐릭터 + 바이블 (리스트/딕셔너리 둘 다 대응) ──
     char_parts = []
-    if isinstance(chars, dict):
-        for role, data in chars.items():
-            if isinstance(data, dict):
-                name = data.get("name", role)
-                char_parts.append(f"[{role}] {name}")
-                for field in ["goal", "need", "secret", "tactics", "speech_pattern", "sample_lines"]:
-                    val = data.get(field)
-                    if val:
-                        char_parts.append(f"  {field}: {val}")
-            elif isinstance(data, str):
-                char_parts.append(f"[{role}] {data}")
-    if isinstance(ext_chars, dict):
-        for role, data in ext_chars.items():
-            if isinstance(data, dict):
-                name = data.get("name", role)
-                char_parts.append(f"[ext:{role}] {name}")
-                for field in ["goal", "need", "secret", "tactics", "speech_pattern"]:
-                    val = data.get(field)
-                    if val:
-                        char_parts.append(f"  {field}: {val}")
-    if isinstance(char_bible, dict):
-        for name, bible in char_bible.items():
-            if isinstance(bible, dict):
-                char_parts.append(f"\n[바이블: {name}]")
-                for k, v in bible.items():
-                    if v:
-                        char_parts.append(f"  {k}: {v}")
+    chars_list = (p.get("char_bible", {}) or {}).get("characters", []) or []
+    if isinstance(chars_list, list) and chars_list:
+        for ch in chars_list:
+            if not isinstance(ch, dict):
+                continue
+            char_parts.append(f"[{ch.get('role', '')}] {ch.get('name', '')}")
+            for f in ["age", "occupation", "goal", "need", "flaw", "secret", "tactics",
+                      "speech_pattern", "sample_lines", "appearance", "backstory", "arc"]:
+                val = ch.get(f)
+                if not val:
+                    continue
+                if isinstance(val, list):
+                    val = " / ".join(str(v) for v in val)
+                elif isinstance(val, dict):
+                    val = " / ".join(f"{kk}: {vv}" for kk, vv in val.items() if vv)
+                char_parts.append(f"  {f}: {val}")
+    else:
+        chars_dict = core.get("characters", {}) or {}
+        if isinstance(chars_dict, dict):
+            for role, data in chars_dict.items():
+                if isinstance(data, dict):
+                    char_parts.append(f"[{role}] {data.get('name', role)}")
+                    for f in ["goal", "need", "secret", "tactics", "speech_pattern"]:
+                        val = data.get(f)
+                        if val:
+                            char_parts.append(f"  {f}: {val}")
     result["characters"] = "\n".join(char_parts)
 
-    # 세계관
+    # ── 세계관 ──
     world = core.get("world_build") or core.get("world", {}) or {}
     if isinstance(world, dict):
-        result["world"] = "\n".join(f"{k}: {v}" for k, v in world.items() if v)
+        result["world"] = "\n".join(f"{k}: {v}" for k, v in world.items() if v and isinstance(v, str))
     elif isinstance(world, str):
         result["world"] = world
 
-    # 구조
-    structure = core.get("structure") or core.get("synopsis", {}) or {}
-    if isinstance(structure, dict):
-        result["structure"] = "\n".join(f"{k}: {v}" for k, v in structure.items() if v)
-    elif isinstance(structure, str):
-        result["structure"] = structure
+    # ── 구조 ──
+    parts = []
+    story = p.get("structure_story", {}) or {}
+    diag = p.get("structure_diag", {}) or {}
+    if isinstance(story, dict):
+        syn = story.get("synopsis_1p", "")
+        if syn:
+            if isinstance(syn, dict):
+                syn = "\n".join(f"  {k}: {v}" for k, v in syn.items() if v)
+            parts.append(f"[시놉시스]\n{syn}")
+        sl = story.get("storyline", "")
+        if sl:
+            if isinstance(sl, dict):
+                sl = "\n".join(f"  {k}: {v}" for k, v in sl.items() if v)
+            parts.append(f"[스토리라인]\n{sl}")
+    if isinstance(diag, dict):
+        bs = diag.get("beat_sheet", [])
+        if isinstance(bs, list) and bs:
+            beat_lines = []
+            for b in bs:
+                if isinstance(b, dict):
+                    beat_lines.append(
+                        f"  [{b.get('beat', '')}] {b.get('episode', '')} — {b.get('description', '')[:200]}"
+                    )
+            if beat_lines:
+                parts.append("[비트 시트]\n" + "\n".join(beat_lines))
+        pp = diag.get("planting_payoff", [])
+        if isinstance(pp, list) and pp:
+            pp_lines = [f"  - {str(item)[:200]}" for item in pp[:10]]
+            parts.append("[Plant & Payoff]\n" + "\n".join(pp_lines))
+    if not parts:
+        fb = core.get("structure") or {}
+        if isinstance(fb, dict):
+            parts.append("\n".join(f"{k}: {v}" for k, v in fb.items() if v))
+        elif isinstance(fb, str):
+            parts.append(fb)
+    result["structure"] = "\n\n".join(parts)
 
-    # 장면 설계
-    scenes = core.get("scene_design") or core.get("key_scenes", {}) or {}
-    if isinstance(scenes, dict):
-        result["scenes"] = "\n".join(f"{k}: {v}" for k, v in scenes.items() if v)
-    elif isinstance(scenes, str):
-        result["scenes"] = scenes
+    # ── 장면 설계 ──
+    scene = p.get("scene_design", {}) or {}
+    scene_parts = []
+    if isinstance(scene, dict):
+        ks = scene.get("key_scenes", [])
+        if isinstance(ks, list):
+            for s in ks:
+                if isinstance(s, dict):
+                    scene_parts.append(
+                        f"  [{s.get('sequence', '')}] {s.get('title', '')} — {s.get('description', '')[:200]}"
+                    )
+        sms = scene.get("scene_map_summary", {})
+        if isinstance(sms, dict) and sms:
+            scene_parts.append(
+                "\n[씬 맵 요약]\n" + "\n".join(f"  {k}: {v}" for k, v in sms.items() if v)
+            )
+    result["scenes"] = "\n".join(scene_parts)
 
-    # 트리트먼트
-    treatment = p.get("treatment") or core.get("treatment", {}) or {}
+    # ── 트리트먼트 ──
+    treatment = p.get("treatment", {}) or {}
+    treat_parts = []
     if isinstance(treatment, dict):
-        parts = []
-        for act_key in sorted(treatment.keys()):
-            parts.append(f"[{act_key}]\n{treatment[act_key]}")
-        result["treatment"] = "\n\n".join(parts)
-    elif isinstance(treatment, str):
-        result["treatment"] = treatment
+        for act_key in ["act1", "act2", "act3"]:
+            act_data = treatment.get(act_key, {})
+            if isinstance(act_data, dict):
+                beats = act_data.get("beats", [])
+                act_num = act_data.get("act", act_key)
+                if isinstance(beats, list):
+                    bt = []
+                    for b in beats:
+                        if isinstance(b, dict):
+                            bt.append(
+                                f"  [{b.get('beat_name', '')}] EP{b.get('episode', '')} — "
+                                f"{b.get('narrative', '')[:300]}"
+                            )
+                    if bt:
+                        treat_parts.append(f"[{act_num}막]\n" + "\n".join(bt))
+            elif isinstance(act_data, str):
+                treat_parts.append(f"[{act_key}]\n{act_data}")
+    result["treatment"] = "\n\n".join(treat_parts)
 
-    # 톤 문서
-    tone = p.get("tone_document") or core.get("tone", {}) or {}
+    # ── 톤 문서 ──
+    tone = p.get("tone_doc") or p.get("tone_document") or core.get("tone", {}) or {}
     if isinstance(tone, dict):
-        result["tone"] = "\n".join(f"{k}: {v}" for k, v in tone.items() if v)
+        tone_parts = []
+        for k, v in tone.items():
+            if not v:
+                continue
+            if isinstance(v, list):
+                v = " / ".join(str(item) for item in v)
+            elif isinstance(v, dict):
+                v = "\n".join(f"    {kk}: {vv}" for kk, vv in v.items() if vv)
+            tone_parts.append(f"  [{k}]\n  {v}")
+        result["tone"] = "\n".join(tone_parts)
     elif isinstance(tone, str):
         result["tone"] = tone
 
+    # ── v1.8: LOCKED 5종 확장 ──
+    idea_seed = p.get("idea_seed", {}) or {}
+    locked_src = p.get("locked", {}) or core.get("locked", {}) or idea_seed
+    locked_lines = []
+    for field, label in [
+        ("locked_core_decisions", "핵심 결정"),
+        ("locked_music_rules", "음악 규약"),
+        ("locked_visual_motifs", "시각 모티프"),
+        ("locked_ending_form", "결말 형식"),
+        ("locked_creator_questions", "작가 결정 사항"),
+    ]:
+        val = locked_src.get(field, "")
+        if val:
+            if isinstance(val, list):
+                val = " / ".join(str(v) for v in val)
+            elif isinstance(val, dict):
+                val = " / ".join(f"{kk}: {vv}" for kk, vv in val.items() if vv)
+            locked_lines.append(f"[{label}] {val}")
+    result["locked_5_extended"] = "\n".join(locked_lines)
+
     return result
-
-
-# ═══════════════════════════════════════════════════════════
-# JSON 파싱 안정화 (v1.8 — Creator v2.5.1/v2.5.4 패턴)
-# ═══════════════════════════════════════════════════════════
 
 import re as _re
 
