@@ -32,6 +32,7 @@ from prompt import (
     extract_from_creator_json_series,
     get_essence_check,
     sanitize_json_string,
+    build_adaptive_context,
     JSON_OUTPUT_RULES,
 )
 
@@ -1358,19 +1359,31 @@ if st.session_state["episode_plans"]:
                 prev_struct = st.session_state.get("beat_structure_types", {}).get(
                     bk(selected_ep, next_beat - 1), ""
                 ) if next_beat > 0 else ""
-                # v1.7: 이전 에피소드 요약 (컨텍스트 관리)
+                # v1.8: 적응형 컨텍스트 관리 — EP 진행에 따라 정보량 자동 조절
                 ep_summary = ""
                 if selected_ep > 1:
-                    ep_summary = st.session_state.get("episode_summaries", {}).get(selected_ep - 1, "")
-                    if not ep_summary:
-                        ep_summary = summarize_episode_context(st.session_state["episode_beats"], selected_ep - 1)
-                        if ep_summary:
-                            if "episode_summaries" not in st.session_state:
-                                st.session_state["episode_summaries"] = {}
-                            st.session_state["episode_summaries"][selected_ep - 1] = ep_summary
+                    # 적응형: EP 진행에 따라 이전 에피소드 정보량 조절
+                    ep_summaries = st.session_state.get("episode_summaries", {})
+                    # 아직 요약이 없는 에피소드는 생성
+                    for prev_ep in range(1, selected_ep):
+                        if prev_ep not in ep_summaries:
+                            s = summarize_episode_context(st.session_state["episode_beats"], prev_ep)
+                            if s:
+                                if "episode_summaries" not in st.session_state:
+                                    st.session_state["episode_summaries"] = {}
+                                st.session_state["episode_summaries"][prev_ep] = s
+                    ep_summary = build_adaptive_context(
+                        st.session_state["episode_beats"],
+                        selected_ep,
+                        st.session_state.get("episode_summaries", {}),
+                    )
+
+                # v1.8: 비트 간 중복 방지 — 이전 비트 정보를 inputs에 임시 추가
+                inputs_with_beats = dict(st.session_state["inputs"])
+                inputs_with_beats["_episode_beats"] = st.session_state.get("episode_beats", {})
 
                 prompt = build_write_episode_beat_prompt(
-                    st.session_state["inputs"],
+                    inputs_with_beats,
                     st.session_state["season_arc"],
                     st.session_state["episode_plans"][selected_ep],
                     selected_ep, next_beat, ne, dur, genre,

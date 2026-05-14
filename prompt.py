@@ -435,6 +435,15 @@ AI SCREENPLAY ESCAPE — AI가 반복하는 10가지 실수 (v1.7 신규)
 [A16. 같은 정보·디테일 반복 확인]
 같은 씬에서 같은 숫자/사물을 3번 이상 확인시키지 마라. 한 번이면 충분하다.
 
+[A17. 비트 간 장면·문장 중복 금지 (v1.8 시리즈 특화)]
+이전 비트에서 이미 발생한 장면을 다시 쓰지 마라.
+❌ Beat 3에서 "지훈이 수현에게 전화한다" → Beat 5에서 또 "지훈이 수현에게 전화한다"
+❌ Beat 2에서 카페 대화 → Beat 4에서 또 카페 대화 (장소+상황 동일)
+❌ 이전 비트의 문장을 그대로 또는 유사하게 반복
+✅ 같은 장소를 재사용하려면: 시간대가 다르고, 감정 톤이 다르고, 새로운 사건이 발생해야 한다.
+✅ 같은 인물 조합이 재등장하려면: 관계가 전진했거나 새로운 정보가 개입해야 한다.
+★ 시리즈 64비트에서 이 규칙이 가장 자주 위반된다. 매 비트 집필 전에 점검하라.
+
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1177,7 +1186,7 @@ def _format_inputs(inputs: dict) -> str:
 
 
 def summarize_episode_context(episode_beats: dict, ep: int) -> str:
-    """v1.7: 컨텍스트 오버플로 대응 — 완료된 에피소드의 핵심만 추출."""
+    """v1.8: 적응형 컨텍스트 관리 — EP 진행에 따라 요약 깊이를 조절."""
     parts = []
     for b in range(8):
         key = f"{ep}_{b}"
@@ -1189,6 +1198,56 @@ def summarize_episode_context(episode_beats: dict, ep: int) -> str:
             else:
                 parts.append(f"Beat {b}: {text[:200]}...")
     return "\n".join(parts) if parts else ""
+
+
+def build_adaptive_context(episode_beats: dict, current_ep: int, episode_summaries: dict) -> str:
+    """v1.8: 적응형 컨텍스트 — EP 진행에 따라 이전 에피소드 정보량을 자동 조절.
+    
+    EP1~2 집필 시: 이전 에피소드 없거나 1개 → 풀 메모 (2000자)
+    EP3~5 집필 시: 직전 2개 EP만 중간 요약 (1000자씩)
+    EP6~8 집필 시: 직전 1개 EP 간략 요약 (500자) + 시즌 아크 참조
+    
+    이렇게 하면 EP8 집필 시에도 프롬프트가 터지지 않는다.
+    """
+    parts = []
+    
+    if current_ep <= 2:
+        # 풀 메모
+        for prev_ep in range(1, current_ep):
+            summary = episode_summaries.get(prev_ep, "")
+            if not summary:
+                summary = summarize_episode_context(episode_beats, prev_ep)
+            if summary:
+                parts.append(f"[EP{prev_ep} 요약]\n{summary[:2000]}")
+    
+    elif current_ep <= 5:
+        # 직전 2개만 중간 요약
+        for prev_ep in range(max(1, current_ep - 2), current_ep):
+            summary = episode_summaries.get(prev_ep, "")
+            if not summary:
+                summary = summarize_episode_context(episode_beats, prev_ep)
+            if summary:
+                parts.append(f"[EP{prev_ep} 요약]\n{summary[:1000]}")
+    
+    else:
+        # EP6~8: 직전 1개만 간략 + 키 포인트
+        prev_ep = current_ep - 1
+        summary = episode_summaries.get(prev_ep, "")
+        if not summary:
+            summary = summarize_episode_context(episode_beats, prev_ep)
+        if summary:
+            parts.append(f"[EP{prev_ep} 간략 요약]\n{summary[:500]}")
+        
+        # 시즌 초반 핵심만 1줄씩
+        for early_ep in range(1, min(3, current_ep)):
+            early_summary = episode_summaries.get(early_ep, "")
+            if early_summary:
+                # 첫 200자만 (핵심 사건 1줄)
+                first_line = early_summary.split("\n")[0][:200] if early_summary else ""
+                if first_line:
+                    parts.append(f"[EP{early_ep} 핵심] {first_line}")
+    
+    return "\n\n".join(parts) if parts else ""
 
 
 
@@ -1674,10 +1733,19 @@ def build_episode_plan_prompt(
 - A 씬 2~3개 → B 씬 1개 → A 씬 2개 → C 씬 1개 → BR → 반복
 - 스토리라인 간 전환은 감정 대비로 (긴장→이완, 슬픔→유머)
 
-[비트 구조 변주 — 2막 반복 방지]
-각 비트에 6유형 중 하나를 배정. 연속 2비트가 같은 유형이면 안 된다:
+[비트 구조 변주 — 2막 반복 방지 + 피로 누적 방지]
+각 비트에 6유형 중 하나를 배정:
   [INV] 조사/발견 / [CON] 대결/충돌 / [REV] 반전/배신
   [EMO] 감정/관계 / [ACT] 행동/추격 / [SIL] 정적/결심
+
+[1단계] 연속 2비트가 같은 유형이면 안 된다.
+[2단계] 에피소드 8비트 안에서 같은 유형이 3회 이상 등장하면 안 된다.
+[3단계] 2막 특화 — Beat 3~6(에피소드 중반)에서 INV가 3회 연속이면 "조사→단서→대화→클리프" 반복에 빠진 것이다. 반드시 CON/ACT/REV 중 하나를 끼워라.
+
+[피로 누적 방지 — 시리즈 전체]
+EP1~EP8 전체에서 같은 비트 유형이 특정 비트 번호에 고정되는 것을 경계하라.
+예: 매 에피소드 Beat 3이 항상 [INV]면 관객은 "아, 이 시간이면 조사하겠지" 하고 예측한다.
+→ 같은 비트 번호에 같은 유형이 3회 이상 반복되면 경고.
 
 [Plant-Payoff 배치]
 시즌 아크의 Plant-Payoff 맵을 확인하고, 이 에피소드에서 심거나 회수할 항목을 명시하라.
@@ -1756,10 +1824,30 @@ def build_write_episode_beat_prompt(
         tail = prev_beat_text[-2500:]
         prev_block = f"\n[직전 비트 마지막 부분 — 연속성 유지]\n{tail}\n"
 
-    # v1.7: 컨텍스트 오버플로 대응
+    # v1.8: 에피소드 내 이전 비트 핵심 행동 목록 (비트 간 중복 방지)
+    prev_actions_block = ""
+    if beat_num > 1:
+        action_lines = []
+        for prev_b in range(beat_num):
+            prev_key = f"{ep_num}_{prev_b}"
+            if prev_key in (inputs.get("_episode_beats", {}) or {}):
+                prev_text = inputs["_episode_beats"][prev_key]
+                # --- 뒤의 메모에서 비트 요약 1줄 추출
+                if "---" in prev_text:
+                    memo = prev_text.split("---", 1)[1]
+                    first_line = memo.strip().split("\n")[0][:150]
+                    action_lines.append(f"  Beat {prev_b}: {first_line}")
+        if action_lines:
+            prev_actions_block = (
+                f"\n[⚠️ 이 에피소드에서 이미 발생한 장면 — 중복 금지]\n"
+                + "\n".join(action_lines)
+                + "\n→ 위 장면과 동일한 장소+상황+행동 조합을 반복하지 마라.\n"
+            )
+
+    # v1.8: 적응형 컨텍스트 관리 — EP 진행에 따라 정보량 자동 조절
     context_block = ""
     if episode_context_summary:
-        context_block = f"\n[이전 에피소드 요약]\n{episode_context_summary[:2000]}\n"
+        context_block = f"\n[이전 에피소드 요약 — EP{ep_num} 집필용 적응형 컨텍스트]\n{episode_context_summary}\n"
 
     # v1.7: 프로듀서 노트 집필모드 주입
     producer_block = ""
@@ -1864,6 +1952,8 @@ def build_write_episode_beat_prompt(
 
 {f"[톤 문서]{chr(10)}{tone_block}" if tone_block else ""}
 {prev_block}
+{prev_actions_block}
+{context_block}
 {elements_block}
 
 [RULES — ★비트의 범위(SCOPE)★ 이것이 가장 중요하다]
@@ -1966,6 +2056,25 @@ def build_write_episode_beat_prompt(
 [RULES — 액션 아이디어 검증 (v1.7)]
 이 비트는 시즌 아크의 핵심 행동을 향해 전진하는가? (전진/방해→OK, 무관→연결하라)
 
+[RULES — 장르 드리프트 방지 (v1.8)]
+★ 시리즈의 가장 위험한 결함은 회가 갈수록 다른 장르로 흘러가는 것이다. ★
+
+[에피소드 간 본질 연속성 체크]
+이 비트를 집필한 뒤 다음을 자가 검증하라:
+□ 이 비트의 감정 톤이 EP1의 감정 톤과 같은 세계에 있는가?
+□ 이 비트에서 [fun_engine]이 작동하고 있는가? 아니면 다른 종류의 재미로 대체되었는가?
+□ 이 비트의 갈등이 [장르 본질]에서 나오는가? 아니면 장르 무관한 인간관계 갈등으로 흘렀는가?
+
+[시즌 중간 지점 경고 — EP4~EP5 집필 시]
+EP4~EP5는 시리즈가 장르 드리프트에 가장 취약한 구간이다.
+미드포인트 반전이 장르를 바꾸는 것처럼 느껴지면 안 된다.
+"게임의 규칙이 바뀌는 것"이지 "장르가 바뀌는 것"이 아니다.
+
+[시즌 후반 경고 — EP7~EP8 집필 시]
+시즌 피날레가 [absolute_goal]에 도달해야 한다.
+피날레가 장르와 무관한 감동/반전으로 끝나면 시리즈 전체가 실패한다.
+호러 시리즈는 공포로 끝나야 하고, 코미디 시리즈는 웃음으로 끝나야 한다.
+
 [RULES — 서사동력 비트별 체크 (v1.7)]
 Goal↔Need 간극: EP1~4=벌어짐 / EP5~6=인식 / EP7~8=합치 또는 선택.
 
@@ -1976,12 +2085,13 @@ Goal↔Need 간극: EP1~4=벌어짐 / EP5~6=인식 / EP7~8=합치 또는 선택.
 18. 빌런 추적 — 이 비트에서 적대자가 뭘 했는가? 직접 등장 안 해도 영향이 느껴져야 한다.
     ★ 클라이맥스 전까지 적대자가 계속 이기고 있어야 한다. 빌런이 매번 실패하면 긴장감 사라진다. ★
 19. LOCKED 검증 — 출력 완료 후 LOCKED 항목 준수 여부 자가 검증.
-20. AI ESCAPE — A1~A16 패턴 자가 점검:
+20. AI ESCAPE — A1~A17 패턴 자가 점검:
    감정 설명 지문(A1) / 같은 말투(A2) / 본 것 반복(A3) / 무대 연출(A4) /
    편의적 정보(A5) / 침묵 부재(A6) / 대사 대칭(A7) / 처음부터 시작(A8) /
    같은 씬 해소(A9) / 총칭적 감각(A10) / 물리적 논리 비약(A11) /
    관찰자 없는 숫자(A12) / 원인 없는 결과(A13) / 캐릭터 재소개(A14) /
-   동작 반복 루프(A15) / 같은 정보 반복(A16) — 1개라도 해당되면 다시 써라.
+   동작 반복 루프(A15) / 같은 정보 반복(A16) /
+   비트 간 장면 중복(A17) — 1개라도 해당되면 다시 써라.
 20. 서사동력 검증 — 이 비트에서 주인공의 행동이 desire_origin(loss/lack)과 arc_direction에 일치하는가?
     Goal을 추구하면서 Need와의 간극이 드러나는가? 서사동력과 어긋나는 행동은 캐릭터 일관성의 붕괴다.
 
@@ -2009,11 +2119,13 @@ EP{ep_num} — Beat {beat_num}. {beat_info['name']}
 - ⭐ 장르 드라이브 5점: ①정보비대칭 ②에스컬레이션↑/→/↓ ③적대자 행동+승패 ④타이머 ⑤장르 쾌감 1줄
 - ⭐ 액션 아이디어 전진: 전진/방해/무관
 - ⭐ 서사동력: Goal 추구 / Need 인식 / 간극 상태
-- AI ESCAPE 점검: A1~A16 중 위반 항목
+- AI ESCAPE 점검: A1~A17 중 위반 항목
 - ⭐ 장르 강제 체크 (Genre Enforcement):
 {genre_enforcement}
 - ⭐ 본질 검증 (v1.8):
 {essence_check}
+- ⭐ 장르 드리프트 체크: EP1의 톤과 이 비트의 톤이 같은 세계인가? (YES/NO + 1줄)
+- ⭐ fun_engine 작동: [{장르}]의 [fun_engine]이 이 비트에서 살아있는가? (YES/NO + 1줄)
 """.strip()
 
 
@@ -2187,7 +2299,7 @@ def build_structural_rewrite_prompt(
 - LOCKED 항목 준수 여부: OK 또는 위반 항목
 
 [AI ESCAPE 점검]
-- A1~A16 중 위반 항목
+- A1~A17 중 위반 항목
 """.strip()
 
 
