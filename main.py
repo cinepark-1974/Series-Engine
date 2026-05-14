@@ -11,6 +11,9 @@ import re
 import json
 from datetime import datetime
 
+from profession_pack import build_multi_profession_block, detect_profession_category
+from period_pack import build_period_block_auto
+
 from prompt import (
     SYSTEM_PROMPT,
     GENRE_RULES,
@@ -1348,6 +1351,33 @@ if st.session_state["episode_plans"]:
             expanded_chars = st.session_state.get("expanded_characters", "")
             if expanded_chars:
                 char_bible += f"\n\n[시리즈 확장 캐릭터]\n{expanded_chars[:2000]}"
+
+            # v1.8: Profession Pack — 캐릭터 직업 디테일 자동 주입
+            profession_block = ""
+            try:
+                # 캐릭터 바이블에서 직업 정보 감지
+                prof_text = st.session_state["inputs"].get("characters", "")
+                if prof_text:
+                    profession_block = build_multi_profession_block([
+                        {"name": "", "occupation": prof_text}
+                    ])
+                    if profession_block:
+                        char_bible += f"\n\n{profession_block[:3000]}"
+            except Exception:
+                pass
+
+            # v1.8: Period Pack — 시대 디테일 자동 주입
+            period_block = ""
+            try:
+                locked_text = "\n".join(st.session_state.get("locked_items", []))
+                world_text = st.session_state["inputs"].get("world", "")
+                combined_text = f"{locked_text}\n{world_text}"
+                if combined_text.strip():
+                    period_block = build_period_block_auto(combined_text)
+                    if period_block:
+                        char_bible += f"\n\n{period_block[:2000]}"
+            except Exception:
+                pass
 
             if st.button(
                 f"🖊️ EP{selected_ep} Beat {next_beat} [{beat_info['name']}] 집필",
