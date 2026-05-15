@@ -2125,7 +2125,7 @@ EP{ep_num} — Beat {beat_num}. {beat_info['name']}
 - ⭐ 본질 검증 (v1.8):
 {essence_check}
 - ⭐ 장르 드리프트 체크: EP1의 톤과 이 비트의 톤이 같은 세계인가? (YES/NO + 1줄)
-- ⭐ fun_engine 작동: [{장르}]의 [fun_engine]이 이 비트에서 살아있는가? (YES/NO + 1줄)
+- ⭐ fun_engine 작동: [{genre}]의 [fun_engine]이 이 비트에서 살아있는가? (YES/NO + 1줄)
 """.strip()
 
 
