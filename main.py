@@ -1,7 +1,15 @@
 """
-👖 BLUE JEANS SERIES ENGINE v1.8 — main.py
+👖 BLUE JEANS SERIES ENGINE v2.0 — main.py
 시즌 아크 → 에피소드 씬 플랜 → 비트 집필 파이프라인
 © 2026 BLUE JEANS PICTURES
+
+★ v2.0 본 작업 — 완전한 엔진
+  [패치 A] Writer Engine 양식 빌더 이식 (v1.9 패치본 유지)
+  [패치 B] 회별 특수 모듈 — OPENING/MIDSEASON TWIST/LOWEST POINT/FINALE MASTERY
+  [패치 C] INSERT 시스템 + PROP 연속성 + GENRE BOOSTER 9장르 + HELPER 룰
+  [패치 D] 시즌 표현 누적 차단 시스템 (AI Escape A17 해결)
+  + SCENE RULES 강화 (씬 분할 / 씬 번호 / 대사 형식)
+  + 회별 사건/시즌 비중 룰 (EPISODE_FOCUS_RATIO)
 """
 
 import streamlit as st
@@ -39,6 +47,415 @@ from prompt import (
     JSON_OUTPUT_RULES,
 )
 
+# ═══════════════════════════════════════════════════════════
+# ★ v1.9 패치 A — Writer Engine DOCX 빌더 자산 이식
+# (분단 알고리즘 / PROP 메모 strip / INSERT 시스템)
+# Writer Engine v3.x main.py의 헬퍼 블록을 그대로 가져와
+# Series Engine 컨텍스트에서 동작하도록 통합.
+# ═══════════════════════════════════════════════════════════
+
+ENGINE_VERSION = "v2.0"
+ENGINE_BUILD_DATE = "2026-05-16"
+
+
+# ═══════════════════════════════════════════════════════════
+# ★ v2.0 — 시즌 표현 누적 시스템
+# 비트 집필 후 핵심 표현(20자 이상 연속 문장)을 자동 추출해
+# 시즌 단위 누적 DB로 관리. 다음 비트 집필 시 3회 이상 누적된
+# 표현은 모델에게 명시적 금지 지시.
+# 정량 보고서 "AI Escape A17 위반 147건" 해결책.
+# ═══════════════════════════════════════════════════════════
+
+def extract_signature_expressions(text: str, min_len: int = 18, max_len: int = 80) -> list:
+    """비트 집필 결과 텍스트에서 시그니처 표현을 추출.
+
+    추출 대상:
+    - 18자 이상 80자 이하의 문장 (한 문장 단위)
+    - 시나리오 본문(지문/대사)만 — 메타·헤더·구분선 제외
+
+    Returns:
+        list[str] — 정규화된 표현 목록 (중복 제거)
+    """
+    import re as _re
+    if not text:
+        return []
+
+    # 메타 영역 잘라내기 — '---' 또는 '═══' 이후는 메모
+    body = text
+    for sep in ['\n---\n', '\n═══', '\n━━━', '\n[BLOCK 2', '\n<WRITER_NOTES']:
+        idx = body.find(sep)
+        if idx > 0:
+            body = body[:idx]
+
+    # 줄 단위로 분리 후 메타·헤더 라인 제외
+    lines = []
+    for raw_line in body.split('\n'):
+        line = raw_line.strip()
+        if not line:
+            continue
+        # 씬 헤딩 제외
+        if _re.match(r'^S#\d+\.', line):
+            continue
+        # 비트 헤더 / EP 헤더 제외
+        if _re.match(r'^(Beat\s+\d+|EP\d+\s*[—\-]|EPISODE\s+\d+|═{3,}|─{3,}|={3,}|━{3,})', line):
+            continue
+        # 메타 prefix 제외 (간이판)
+        if _re.match(r'^[\-•·*⭐★□]\s*(\*\*)?(서사동력|관객 심리|빌런|비밀|장르|본질|SCOPE|AI ESCAPE|fun_engine|absolute_goal|emotion_triggers|Plant|Payoff|핵심|모티프|맥거핀|보이스|액션 아이디어|비트)', line):
+            continue
+        # 캐릭터 + \t\t + 대사 형식 → 대사 부분만 추출
+        m_dialogue = _re.match(r'^([가-힣]{1,5})\s*\t+(.+)$', line)
+        if m_dialogue:
+            line = m_dialogue.group(2).strip()
+        lines.append(line)
+
+    # 문장 단위 분리 (마침표·물음표·느낌표 뒤)
+    text_joined = ' '.join(lines)
+    sentences = _re.split(r'(?<=[.!?])\s+', text_joined)
+
+    expressions = []
+    seen = set()
+    for sent in sentences:
+        s = sent.strip()
+        # 길이 필터
+        if not (min_len <= len(s) <= max_len):
+            continue
+        # 정규화 — 끝의 구두점 제거 후 중복 검사
+        norm = s.rstrip('.!?').strip()
+        if norm in seen:
+            continue
+        seen.add(norm)
+        expressions.append(s)
+
+    return expressions
+
+
+def update_season_expression_db(
+    db: dict, new_text: str, ep_num: int, beat_num: int,
+) -> dict:
+    """시즌 표현 누적 DB 갱신.
+
+    Args:
+        db: 현재 누적 DB. { 표현 텍스트: 누적 횟수 }
+        new_text: 방금 집필 완료된 비트 텍스트
+        ep_num: EP 번호 (디버깅 용)
+        beat_num: Beat 번호 (디버깅 용)
+
+    Returns:
+        갱신된 DB (입력 db 객체를 그대로 mutate 후 반환)
+    """
+    if db is None:
+        db = {}
+    expressions = extract_signature_expressions(new_text)
+    for expr in expressions:
+        norm = expr.strip().rstrip('.!?').strip()
+        if not norm:
+            continue
+        db[norm] = db.get(norm, 0) + 1
+    return db
+
+
+def get_overused_expressions(db: dict, threshold: int = 3) -> list:
+    """누적 N회 이상인 표현 목록 반환 (높은 순)."""
+    if not db:
+        return []
+    items = [(e, c) for e, c in db.items() if c >= threshold]
+    items.sort(key=lambda x: -x[1])
+    return items
+
+
+# ─────────────────────────────────────
+# 지문(액션 라인) 자동 분단 헬퍼
+# AI가 6~9문장을 한 문단에 몰아넣은 경우, 의미 비트 단위로 분단.
+# AI의 시적 의도가 명확한 경우(짧은 단락)는 절대 건드리지 않음.
+# ─────────────────────────────────────
+
+# 분단 임계값
+_ACTION_SPLIT_CHAR_THRESHOLD = 150
+_ACTION_SPLIT_SENTENCE_THRESHOLD = 7
+_ACTION_SPLIT_HARD_CHARS = 240
+_ACTION_SPLIT_HARD_SENTENCES = 9
+
+
+def _split_sentences(text: str):
+    """한국어 지문을 문장 단위로 쪼갠다."""
+    import re as _re
+    parts = _re.split(r'(?<=[.!?])\s+', text.strip())
+    return [s.strip() for s in parts if s.strip()]
+
+
+def _detect_paragraph_break_index(sentences: list) -> int:
+    """문장 리스트에서 가장 자연스러운 분단 위치(인덱스)를 찾는다."""
+    import re as _re
+    n = len(sentences)
+    if n < 4:
+        return -1
+
+    candidates = []
+    for i in range(2, n - 1):
+        cur = sentences[i]
+        prev = sentences[i - 1]
+        score = 0
+
+        # 시간 압축 / 큰 상황 전환
+        time_break_patterns = [
+            r'수업이?\s*(끝나|진행)',
+            r'시간이\s*(흐른|지난|경과)',
+            r'(다음\s*날|이튿날|새벽|아침|저녁|밤)',
+            r'몇\s*(분|시간|일)\s*(후|뒤)',
+            r'(직후|잠시\s*후|곧)',
+        ]
+        for pat in time_break_patterns:
+            if _re.search(pat, cur):
+                score += 10
+                break
+
+        if _re.search(r'(혼자|홀로|단독)', cur):
+            score += 6
+
+        space_patterns = [
+            r'^(긴\s|넓은\s|좁은\s|텅\s|빈\s|새|작은\s|커다란\s)',
+            r'^(테이블|벽|창|문|바닥|천장|복도|골목)\s',
+            r'^(아일랜드|카운터|책상|의자|침대|소파)\s',
+            r'^[가-힣]+\s위에',
+        ]
+        prev_has_actor = bool(
+            _re.search(r'[가-힣]{2,4}이\s', prev) or _re.search(r'[가-힣]{2,4}가\s', prev)
+        )
+        cur_is_space = any(_re.search(pat, cur) for pat in space_patterns)
+        if prev_has_actor and cur_is_space:
+            score += 5
+
+        prev_actor = _re.match(r'^([가-힣]{2,4})(이|가)\s', prev)
+        cur_actor = _re.match(r'^([가-힣]{2,4})(이|가)\s', cur)
+        if prev_actor and cur_actor and prev_actor.group(1) != cur_actor.group(1):
+            score += 4
+
+        center_distance = abs(i - n // 2)
+        position_bonus = max(0, 3 - center_distance)
+        score += position_bonus
+
+        if score >= 5:
+            candidates.append((i, score))
+
+    if not candidates:
+        return -1
+    candidates.sort(key=lambda x: -x[1])
+    return candidates[0][0]
+
+
+def _split_action_paragraph(text: str, _depth: int = 0) -> list:
+    """지문 단락이 임계값을 넘으면 의미 비트 단위로 분할.
+
+    ★ v1.9 안전 가드: 재귀 깊이 제한 + 동일 출력 감지로 무한 재귀 방지.
+    """
+    text = text.strip()
+    if not text:
+        return [text]
+
+    # 재귀 깊이 제한 — 100단계 이상은 그대로 반환
+    if _depth >= 100:
+        return [text]
+
+    char_len = len(text)
+    sentences = _split_sentences(text)
+    sent_count = len(sentences)
+
+    triggered_by_length = char_len >= _ACTION_SPLIT_CHAR_THRESHOLD
+    triggered_by_sentence = (char_len >= 100 and sent_count >= _ACTION_SPLIT_SENTENCE_THRESHOLD)
+
+    if not (triggered_by_length or triggered_by_sentence):
+        return [text]
+
+    # 문장이 1개 이하면 분할 불가
+    if sent_count <= 1:
+        return [text]
+
+    split_idx = _detect_paragraph_break_index(sentences)
+    if split_idx < 0:
+        if char_len < _ACTION_SPLIT_HARD_CHARS and sent_count < _ACTION_SPLIT_HARD_SENTENCES:
+            return [text]
+        split_idx = sent_count // 2
+
+    # 분할 인덱스가 양 끝이면 분할 무효 — 그대로 반환
+    if split_idx <= 0 or split_idx >= sent_count:
+        return [text]
+
+    part1 = ' '.join(sentences[:split_idx])
+    part2 = ' '.join(sentences[split_idx:])
+
+    # 분할 결과가 원본과 거의 동일하면 (분할 실패) 종료
+    if len(part1) == 0 or len(part2) == 0:
+        return [text]
+    if part1 == text or part2 == text:
+        return [text]
+
+    return [part1] + _split_action_paragraph(part2, _depth + 1)
+
+
+# ─────────────────────────────────────
+# PROP CONTINUITY 메모 / 자가 검증 태그 자동 제거
+# ─────────────────────────────────────
+
+import re as _re_prop
+
+
+def _strip_prop_state_memos(text: str) -> str:
+    """텍스트에서 [소품 상태 / ...] 메모, GENRE_*_CHECK 태그 등을 제거."""
+    if not text:
+        return text
+
+    pattern_codeblock = _re_prop.compile(
+        r'```[^\n]*\n\[소품\s*상태[^\]]*\][\s\S]*?```',
+        _re_prop.MULTILINE,
+    )
+    text = pattern_codeblock.sub('', text)
+
+    pattern_inline = _re_prop.compile(
+        r'\n*\[소품\s*상태[^\]]*\]\s*\n'
+        r'(?:[\s]*[-•·][^\n]*\n?)+',
+        _re_prop.MULTILINE,
+    )
+    text = pattern_inline.sub('\n', text)
+
+    pattern_internal = _re_prop.compile(
+        r'\n*\[?(?:INTERNAL|작가\s*노트|작가노트|소품\s*추적)[^\]]*\]?\s*\n'
+        r'(?:\[소품\s*상태[^\]]*\]\s*\n)?'
+        r'(?:[\s]*[-•·][^\n]*\n?)+',
+        _re_prop.IGNORECASE | _re_prop.MULTILINE,
+    )
+    text = pattern_internal.sub('\n', text)
+
+    for tag in ('GENRE_BOOSTER_CHECK', 'HELPER_CHARACTER_CHECK', 'GENRE_ESSENCE_CHECK'):
+        pattern = _re_prop.compile(
+            r'\n*<' + tag + r'>[\s\S]*?</' + tag + r'>\n*',
+            _re_prop.IGNORECASE,
+        )
+        text = pattern.sub('\n', text)
+
+    pattern_check_header = _re_prop.compile(
+        r'\n*\[★?\s*비트\s*종료[^\]]*(?:GENRE_BOOSTER_CHECK|GENRE_ESSENCE_CHECK)[^\]]*\][\s\S]*?(?=\n\[|\nS#|\n$|\Z)',
+        _re_prop.IGNORECASE,
+    )
+    text = pattern_check_header.sub('\n', text)
+
+    text = _re_prop.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+# ─────────────────────────────────────
+# INSERT 시스템 (화면 텍스트 표기)
+# ─────────────────────────────────────
+
+import re as _re_insert
+
+_INSERT_LABEL_KEYWORDS = [
+    '카톡', '메신저', '라인', '디스코드', '카카오톡',
+    '문자', 'SMS', 'MMS',
+    '이메일', '메일',
+    '유튜브', 'YouTube', 'youtube', 'TV', '뉴스', '방송',
+    'SNS', '인스타', '인스타그램', '페이스북', '트위터', 'X', '틱톡', 'DM',
+    '검색', '구글', '네이버', '다음',
+    '노트', '일기', '메모', '편지', '손글씨', '쪽지',
+    '신문', '잡지', '기사', '헤드라인',
+    '자막',
+    '알림',
+    '핸드폰', '핸드폰 화면', '폰', '폰 화면', '화면',
+]
+
+
+def _is_insert_label(text: str) -> bool:
+    text = text.strip()
+    if not (text.startswith('[') and ']' in text):
+        return False
+    label_match = _re_insert.match(r'^\[([^\]]+)\]', text)
+    if not label_match:
+        return False
+    label_inner = label_match.group(1)
+    return any(kw in label_inner for kw in _INSERT_LABEL_KEYWORDS)
+
+
+def _parse_insert_blocks(text: str) -> list:
+    """여러 줄 텍스트를 받아 INSERT 블록과 일반 텍스트로 분리."""
+    if not text or not text.strip():
+        return []
+
+    lines = text.split('\n')
+    items = []
+    i = 0
+    n = len(lines)
+    accumulated_action = []
+
+    def flush_action():
+        if accumulated_action:
+            joined = '\n'.join(accumulated_action).strip()
+            if joined:
+                items.append({'type': 'action', 'data': joined})
+            accumulated_action.clear()
+
+    while i < n:
+        line = lines[i]
+        line_stripped = line.strip()
+
+        # 형식 A: INSERT — / INSERT - / INSERT:
+        if _re_insert.match(r'^INSERT\s*[—\-:]', line_stripped, _re_insert.IGNORECASE):
+            flush_action()
+            header = line_stripped
+            body_lines = []
+            i += 1
+            while i < n:
+                bl = lines[i].strip()
+                if _re_insert.match(r'^\[/INSERT\]?$', bl, _re_insert.IGNORECASE):
+                    i += 1
+                    break
+                if not bl:
+                    j = i + 1
+                    while j < n and not lines[j].strip():
+                        j += 1
+                    if j >= n:
+                        i = j
+                        break
+                    next_line = lines[j].strip()
+                    if _re_insert.match(r'^\[/INSERT\]?$', next_line, _re_insert.IGNORECASE):
+                        i = j + 1
+                        break
+                    if not _re_insert.match(r"^['\"\u2018\u2019\u201C\u201D]", next_line):
+                        i = j
+                        break
+                    i += 1
+                    continue
+                body_lines.append(bl)
+                i += 1
+            items.append({
+                'type': 'insert_block',
+                'data': {'header': header, 'body': body_lines},
+            })
+            continue
+
+        if _is_insert_label(line_stripped):
+            flush_action()
+            items.append({'type': 'insert_label', 'data': line_stripped})
+            i += 1
+            continue
+
+        if _re_insert.match(r'^\[/INSERT\]?$', line_stripped, _re_insert.IGNORECASE):
+            i += 1
+            continue
+
+        accumulated_action.append(line)
+        i += 1
+
+    flush_action()
+    return items
+
+
+def _parse_insert_label(text: str) -> tuple:
+    """형식 B 라벨 한 줄을 (label, body)로 분리."""
+    m = _re_insert.match(r'^(\[[^\]]+\])\s*(.*)$', text.strip())
+    if m:
+        return m.group(1), m.group(2).strip()
+    return text, ""
+
+
 # ──────────────────────────────────────────────
 # Page Config
 # ──────────────────────────────────────────────
@@ -48,6 +465,43 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+# ──────────────────────────────────────────────
+# ★ v2.0 — Sidebar Engine Info (Writer/Creator Engine과 동일 톤)
+# ──────────────────────────────────────────────
+with st.sidebar:
+    st.markdown(f"""
+    <div style="padding:12px;background:#F0F2FF;border-radius:8px;border-left:3px solid #191970;font-family:'Pretendard',sans-serif;">
+        <div style="font-size:.72rem;color:#191970;font-weight:700;letter-spacing:.05em;margin-bottom:4px;">ENGINE INFO</div>
+        <div style="font-size:1.05rem;font-weight:700;color:#191970;">Series Engine</div>
+        <div style="font-size:1.25rem;font-weight:900;color:#FFCB05;background:#191970;padding:2px 8px;border-radius:4px;display:inline-block;margin-top:4px;">
+            {ENGINE_VERSION}
+        </div>
+        <div style="font-size:.7rem;color:#666;margin-top:8px;">
+            Build: {ENGINE_BUILD_DATE}<br>
+            Creator Engine v2.5.3+ 호환<br>
+            Writer Engine 양식 정합
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.caption("버전이 최신인지 확인하세요.")
+
+    # ★ v2.0 — 시즌 표현 누적 현황 (집필 중일 때만)
+    _expr_db = st.session_state.get("season_expression_db", {}) or {}
+    if _expr_db:
+        _overused = [(e, c) for e, c in _expr_db.items() if c >= 3]
+        _total = len(_expr_db)
+        _over_count = len(_overused)
+        st.markdown(f"""
+        <div style="padding:10px;background:#FFF9E6;border-radius:8px;border-left:3px solid #FFCB05;margin-top:12px;font-family:'Pretendard',sans-serif;">
+            <div style="font-size:.7rem;color:#7A6500;font-weight:700;letter-spacing:.05em;margin-bottom:4px;">★ 시즌 표현 누적 (v2.0)</div>
+            <div style="font-size:.78rem;color:#1A1A2E;line-height:1.4;">
+                추적 표현: <b>{_total}</b>개<br>
+                3회 이상 누적: <b style="color:#D32F2F">{_over_count}</b>개
+            </div>
+            <div style="font-size:.62rem;color:#888;margin-top:4px;">다음 비트 집필 시 자동 차단</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────
 # Custom CSS — Creator Engine 디자인 시스템 통일
@@ -525,6 +979,7 @@ DEFAULTS = {
     "locked_items": [],
     "open_items": [],
     "producer_notes_write": "",
+    "season_expression_db": {},  # v2.0
 }
 
 for k, v in DEFAULTS.items():
@@ -654,74 +1109,915 @@ def build_txt_download(text: str, filename: str):
 
 
 def build_docx_download(text: str, filename: str, title: str = ""):
+    """v1.9 — Writer Engine 양식 빌더 호출 래퍼.
+
+    기존 평문 빌더 자리를 한국 시나리오 표준 양식 빌더로 교체.
+    text가 시즌 전체(`============================================================
+EPISODE N` 마커 포함)인지 단일 EP 텍스트인지 자동 판단해
+    어댑터 함수로 위임. 메타데이터(장르/부수/비트 수)는 session_state에서 자동 추출.
+    """
     try:
-        from docx import Document as DocxDocument
-        from docx.shared import Pt, RGBColor
-        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        # session_state에서 메타데이터 추출 (있으면)
+        _genre = st.session_state.get("genre", "") or ""
+        _num_eps = st.session_state.get("num_episodes", 0) or 0
+        _beats_count = len(st.session_state.get("episode_beats", {}) or {})
 
-        doc = DocxDocument()
-        style = doc.styles["Normal"]
-        style.font.name = "맑은 고딕"
-        style.font.size = Pt(10)
-        style.paragraph_format.space_after = Pt(4)
-        style.paragraph_format.line_spacing = 1.5
+        # 시즌 전체 마커 감지
+        if "\nEPISODE " in text and ("=" * 30) in text:
+            data = make_series_docx_bytes(
+                text, title=title, mode="season",
+                genre=_genre, num_episodes=_num_eps,
+                beats_done_count=_beats_count,
+            )
+        else:
+            data = make_series_docx_bytes(
+                text, title=title, mode="episode",
+                genre=_genre, num_episodes=_num_eps,
+                beats_done_count=_beats_count,
+            )
 
-        if title:
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = p.add_run(title)
-            run.font.size = Pt(16)
-            run.font.bold = True
-            run.font.color.rgb = RGBColor(0x19, 0x19, 0x70)
-            doc.add_paragraph()
-
-        for line in text.split("\n"):
-            stripped = line.strip()
-            if re.match(r"^S#\d+\.", stripped):
-                p = doc.add_paragraph()
-                run = p.add_run(stripped)
-                run.font.bold = True
-                run.font.size = Pt(11)
-                run.font.color.rgb = RGBColor(0x19, 0x19, 0x70)
-            elif stripped.startswith("=" * 10):
-                p = doc.add_paragraph()
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                run = p.add_run(stripped)
-                run.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-            elif stripped.startswith("EPISODE "):
-                p = doc.add_paragraph()
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                run = p.add_run(stripped)
-                run.font.size = Pt(14)
-                run.font.bold = True
-            elif stripped == "--- TITLE ---":
-                p = doc.add_paragraph()
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                run = p.add_run("— TITLE —")
-                run.font.italic = True
-                run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-            else:
-                doc.add_paragraph(line)
-
-        section = doc.sections[0]
-        footer = section.footer
-        fp = footer.paragraphs[0]
-        fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        fr = fp.add_run("BLUE JEANS SERIES ENGINE v1.8 · BLUE JEANS PICTURES")
-        fr.font.size = Pt(7)
-        fr.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
-
-        buf = io.BytesIO()
-        doc.save(buf)
-        buf.seek(0)
         st.download_button(
             label=f"📘 {filename}",
-            data=buf.getvalue(),
+            data=data,
             file_name=filename,
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
     except ImportError:
         st.warning("python-docx가 설치되지 않았습니다. TXT 다운로드를 이용하세요.")
+    except Exception as e:
+        st.error(f"DOCX 생성 중 오류가 발생했습니다: {e}")
+
+
+# ═══════════════════════════════════════════════════════════
+# ★ v1.9 패치 A — 한국 시나리오 표준 양식 DOCX 빌더
+# Writer Engine v3.x의 make_docx_bytes 자산을 Series Engine
+# 컨텍스트로 이식. 양식 스타일 7종 + 메타 차단 + INSERT 시스템.
+# ═══════════════════════════════════════════════════════════
+
+# Series Engine 전용 메타 차단 키워드 (Writer Engine 100+ 키워드에 추가)
+# v1.8 「수비니어샵」 SEASON1_FULL 분석으로 식별된 본문 누출 패턴
+_SERIES_META_PREFIX_PATTERNS = [
+    # 비트 단위 메타 헤더
+    "비트 요약", "비트요약",
+    "SCOPE 검증", "SCOPE검증",
+    "5단계 추적", "5단계추적",
+    "작동한 장르 장치", "작동한 장르 장치 목록",
+    "핵심 요소 추적", "핵심요소추적",
+    "관객 심리", "관객심리",
+    "비밀 경제", "비밀경제",
+    "빌런 추적", "빌런추적", "Villain 4Q", "Villain 추적",
+    "LOCKED 검증", "LOCKED검증",
+    "서사동력 추적", "서사동력추적", "서사동력",
+    "보이스 점검", "보이스점검",
+    "장르 드라이브 5점", "장르드라이브 5점",
+    "액션 아이디어 전진", "액션 아이디어",
+    "AI ESCAPE 점검", "AI ESCAPE", "AI Escape", "AI 탈출",
+    "장르 강제 체크", "장르강제 체크", "Genre Enforcement",
+    "본질 검증", "본질검증",
+    "장르 드리프트 체크", "장르 드리프트",
+    "fun_engine 작동", "fun_engine",
+    "B-Story 진행", "B-Story",
+    "BJND 4축", "BJND",
+    # 본질 3중 선언 (Creator Engine v2.5.5+ 호환)
+    "absolute_goal", "emotion_triggers", "fun_engine",
+    # 장르 강제 체크 4축 (Series Engine 「수비니어샵」 64회 등장 — 매 비트마다)
+    "정보 비대칭", "정보비대칭",
+    "시계 장치", "시계장치",
+    "도덕선 이동", "도덕선이동",
+    "물리적 위협", "물리적위협",
+    # 씬 플랜 단위 메타
+    "맥거핀 1", "맥거핀 2", "맥거핀 3", "맥거핀 4",
+    "맥거핀1", "맥거핀2", "맥거핀3", "맥거핀4",
+    "맥거핀",
+    "캐릭터 비밀", "캐릭터비밀",
+    "핵심 장소", "핵심장소",
+    "모티프",
+    "열린 질문", "열린질문",
+    "Dramatic Irony",
+    "Zeigarnik",
+    # 시리즈 단위 비밀
+    "시즌 비밀", "중간 비밀", "에피소드 비밀",
+    # Writer Engine 공통 메타 (중복이지만 안전망)
+    "writer_notes", "plant_payoff_tag", "plant_payoff",
+    "scene_meta", "quality_check",
+    "Plant:", "Plant/Payoff", "Payoff:", "Payoff :",
+    "Plant 유지", "Plant유지", "Payoff 회수", "Payoff회수",
+    "서브플롯", "서브플롯 진행",
+    "캐릭터 전술", "캐릭터전술", "캐릭터 아크",
+    "비밀",
+    "장르 드라이브", "장르드라이브",
+    # 장르 장치 snake_case (Writer Engine 90개 — Series에서도 누출)
+    "premise_engine", "comic_contradiction", "character_comic_flaw",
+    "comic_escalation", "line_surprise", "status_comedy",
+    "timing_precision", "callback_payoff", "scene_comic_engine",
+    "joke_density",
+    "fear_anticipation", "uncertainty", "sensory_unease",
+    "threat_design", "dread_pacing", "violation_of_safety",
+    "image_residue", "vulnerability", "false_relief",
+    "terror_escalation",
+    "information_asymmetry", "escalation", "clock_device",
+    "suspense_peak", "plot_twist", "investigator_obstacle",
+    "villain_intelligence", "moral_ambiguity", "red_herring",
+    "irreversible_stakes",
+    "action_spark", "physical_choreography", "setpiece_scale",
+    "hero_signature", "obstacle_escalation", "stakes_personal",
+    "counter_attack", "low_point", "final_confrontation",
+    "kinetic_rhythm",
+    "longing_distance", "touch_hesitation", "romantic_specificity",
+    "emotional_subtext", "miscommunication", "emotional_reversal",
+    "vulnerability_moment", "physical_chemistry", "obstacle_internal",
+    "payoff_emotional",
+    "world_rule", "tech_showcase", "awe_moment", "info_drip",
+    "human_anchor", "rule_consequence", "visual_wonder",
+    "scale_shift", "philosophical_stakes", "discovery_rhythm",
+    "magic_rule", "mythic_echo", "threshold_crossing",
+    "wonder_image", "sacrifice_price", "prophecy_twist",
+    # 추가 본문 누출 후보 (Series Engine 진단으로 식별)
+    "pressure_escalation", "threat_visibility_control",
+    "desire_origin",
+    # 한자 / 특수 메타
+    "수미상관", "수미 상관",
+    "Cold Opening", "콜드 오프닝",
+]
+
+
+def make_series_docx_bytes(
+    text: str,
+    title: str = "",
+    mode: str = "season",
+    genre: str = "",
+    num_episodes: int = 0,
+    beats_done_count: int = 0,
+    fact_based: bool = False,
+    historical: bool = False,
+    historical_type: str = "",
+) -> bytes:
+    """시리즈 시나리오 DOCX — 한국 표준 시나리오 서식.
+
+    Series Engine episode_beats 텍스트를 받아 Writer Engine 양식으로 렌더링.
+
+    Parameters
+    ----------
+    text : str
+        Series Engine 본문 텍스트 (시즌 전체 또는 단일 EP).
+    title : str
+        커버 페이지에 표시할 제목 (작품명 또는 EP명).
+    mode : "season" | "episode"
+        season: 시즌 표지 + EP 분리 페이지 + 비트 헤더 처리.
+        episode: 단일 EP 표지 + 비트 헤더 처리.
+    genre : str
+        장르 표시 (커버 페이지 부제).
+    num_episodes : int
+        시즌 총 EP 수 (커버 페이지 부제).
+    beats_done_count : int
+        완성 비트 수 (커버 페이지 진행도).
+    fact_based / historical / historical_type :
+        면책 자막 페이지 자동 삽입 조건.
+    """
+    import re
+    from docx import Document as DocxDocument
+    from docx.shared import Pt, RGBColor, Mm, Cm
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.style import WD_STYLE_TYPE
+    from docx.oxml.ns import qn
+    from io import BytesIO
+
+    doc = DocxDocument()
+
+    # ── 페이지 설정 (A4, 20mm 마진) ──
+    section = doc.sections[0]
+    section.page_width = Mm(210)
+    section.page_height = Mm(297)
+    section.top_margin = Mm(20)
+    section.bottom_margin = Mm(20)
+    section.left_margin = Mm(20)
+    section.right_margin = Mm(20)
+
+    # ── 기본 스타일: 함초롬바탕 10pt ──
+    style_normal = doc.styles["Normal"]
+    style_normal.font.name = "함초롬바탕"
+    style_normal.font.size = Pt(10)
+    style_normal.paragraph_format.space_after = Pt(2)
+    style_normal.paragraph_format.space_before = Pt(0)
+    rpr = style_normal.element.rPr
+    if rpr is None:
+        rpr = style_normal.element.makeelement(qn('w:rPr'), {})
+        style_normal.element.append(rpr)
+    rfonts = rpr.find(qn('w:rFonts'))
+    if rfonts is None:
+        rfonts = rpr.makeelement(qn('w:rFonts'), {})
+        rpr.append(rfonts)
+    rfonts.set(qn('w:eastAsia'), '함초롬바탕')
+
+    def _set_eastasia_font(rpr_elem, font_name='함초롬바탕'):
+        rf = rpr_elem.find(qn('w:rFonts'))
+        if rf is None:
+            rf = rpr_elem.makeelement(qn('w:rFonts'), {})
+            rpr_elem.append(rf)
+        rf.set(qn('w:eastAsia'), font_name)
+
+    # ── 양식 스타일 7종 + Series 전용 2종 ──
+
+    # [1] 씬번호
+    style_scene = doc.styles.add_style('씬번호', WD_STYLE_TYPE.PARAGRAPH)
+    style_scene.base_style = doc.styles['Normal']
+    style_scene.font.name = '함초롬바탕'
+    style_scene.font.size = Pt(11)
+    style_scene.font.bold = True
+    style_scene.paragraph_format.space_before = Pt(24)
+    style_scene.paragraph_format.space_after = Pt(6)
+    style_scene.paragraph_format.line_spacing = 1.5
+    _set_eastasia_font(style_scene.element.get_or_add_rPr())
+
+    # [2] 대사
+    style_dialogue = doc.styles.add_style('대사', WD_STYLE_TYPE.PARAGRAPH)
+    style_dialogue.base_style = doc.styles['Normal']
+    style_dialogue.font.name = '함초롬바탕'
+    style_dialogue.font.size = Pt(10)
+    style_dialogue.font.bold = True
+    style_dialogue.paragraph_format.left_indent = Cm(1.25)
+    style_dialogue.paragraph_format.space_before = Pt(8)
+    style_dialogue.paragraph_format.space_after = Pt(2)
+    style_dialogue.paragraph_format.line_spacing = 1.5
+    _set_eastasia_font(style_dialogue.element.get_or_add_rPr())
+
+    # [3] 대사연속
+    style_dialogue_cont = doc.styles.add_style('대사연속', WD_STYLE_TYPE.PARAGRAPH)
+    style_dialogue_cont.base_style = style_dialogue
+    style_dialogue_cont.paragraph_format.space_before = Pt(0)
+    style_dialogue_cont.paragraph_format.space_after = Pt(0)
+
+    # [4] 지문
+    style_action = doc.styles.add_style('지문', WD_STYLE_TYPE.PARAGRAPH)
+    style_action.base_style = doc.styles['Normal']
+    style_action.font.name = '함초롬바탕'
+    style_action.font.size = Pt(10)
+    style_action.font.bold = False
+    style_action.paragraph_format.space_before = Pt(2)
+    style_action.paragraph_format.space_after = Pt(2)
+    _set_eastasia_font(style_action.element.get_or_add_rPr())
+
+    # [5] INSERT 헤더
+    style_insert_header = doc.styles.add_style('인서트헤더', WD_STYLE_TYPE.PARAGRAPH)
+    style_insert_header.base_style = doc.styles['Normal']
+    style_insert_header.font.name = '함초롬바탕'
+    style_insert_header.font.size = Pt(9)
+    style_insert_header.font.bold = True
+    style_insert_header.paragraph_format.left_indent = Cm(2.55)
+    style_insert_header.paragraph_format.space_before = Pt(8)
+    style_insert_header.paragraph_format.space_after = Pt(2)
+    _set_eastasia_font(style_insert_header.element.get_or_add_rPr())
+
+    # [6] INSERT 본문
+    style_insert_body = doc.styles.add_style('인서트본문', WD_STYLE_TYPE.PARAGRAPH)
+    style_insert_body.base_style = doc.styles['Normal']
+    style_insert_body.font.name = '함초롬바탕'
+    style_insert_body.font.size = Pt(10)
+    style_insert_body.font.italic = True
+    style_insert_body.paragraph_format.left_indent = Cm(2.55)
+    style_insert_body.paragraph_format.space_before = Pt(2)
+    style_insert_body.paragraph_format.space_after = Pt(2)
+    style_insert_body.paragraph_format.line_spacing = 1.4
+    _set_eastasia_font(style_insert_body.element.get_or_add_rPr())
+
+    # [7] INSERT 라벨
+    style_insert_label = doc.styles.add_style('인서트라벨', WD_STYLE_TYPE.PARAGRAPH)
+    style_insert_label.base_style = doc.styles['Normal']
+    style_insert_label.font.name = '함초롬바탕'
+    style_insert_label.font.size = Pt(10)
+    style_insert_label.paragraph_format.left_indent = Cm(1.42)
+    style_insert_label.paragraph_format.space_before = Pt(4)
+    style_insert_label.paragraph_format.space_after = Pt(4)
+    _set_eastasia_font(style_insert_label.element.get_or_add_rPr())
+
+    # [Series-1] EP 분리 헤더 (Series 전용)
+    style_ep_heading = doc.styles.add_style('에피소드헤더', WD_STYLE_TYPE.PARAGRAPH)
+    style_ep_heading.base_style = doc.styles['Normal']
+    style_ep_heading.font.name = '함초롬바탕'
+    style_ep_heading.font.size = Pt(20)
+    style_ep_heading.font.bold = True
+    style_ep_heading.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    style_ep_heading.paragraph_format.space_before = Pt(48)
+    style_ep_heading.paragraph_format.space_after = Pt(24)
+    _set_eastasia_font(style_ep_heading.element.get_or_add_rPr())
+
+    # [Series-2] 비트 구분 헤더 (Series 전용)
+    style_beat_heading = doc.styles.add_style('비트헤더', WD_STYLE_TYPE.PARAGRAPH)
+    style_beat_heading.base_style = doc.styles['Normal']
+    style_beat_heading.font.name = '함초롬바탕'
+    style_beat_heading.font.size = Pt(10)
+    style_beat_heading.font.bold = True
+    style_beat_heading.font.italic = True
+    style_beat_heading.paragraph_format.space_before = Pt(18)
+    style_beat_heading.paragraph_format.space_after = Pt(8)
+    _set_eastasia_font(style_beat_heading.element.get_or_add_rPr())
+
+    # ── 헬퍼 함수 ──
+    def add_text(s, bold=False, size=None, color=None, align=None):
+        p = doc.add_paragraph()
+        if align:
+            p.alignment = align
+        r = p.add_run(s)
+        r.font.name = "함초롬바탕"
+        _set_eastasia_font(r._element.get_or_add_rPr())
+        if bold:
+            r.bold = True
+        if size:
+            r.font.size = size
+        if color:
+            r.font.color.rgb = color
+        return p
+
+    def add_scene_heading(s):
+        p = doc.add_paragraph(style='씬번호')
+        r = p.add_run(s)
+        r.font.name = "함초롬바탕"
+        _set_eastasia_font(r._element.get_or_add_rPr())
+        return p
+
+    def add_dialogue(char_name, parenthetical, line, continuation=False):
+        if continuation:
+            p = doc.add_paragraph(style='대사연속')
+            speaker_part = "\t\t"
+        else:
+            p = doc.add_paragraph(style='대사')
+            speaker_part = f"{char_name}\t\t"
+
+        body_parts = []
+        if parenthetical:
+            body_parts.append((f"({parenthetical}) ", True))
+        if line:
+            import re as _re
+            chunks = _re.split(r'(\([^()]*\))', line)
+            for chunk in chunks:
+                if not chunk:
+                    continue
+                if chunk.startswith('(') and chunk.endswith(')'):
+                    body_parts.append((chunk, True))
+                else:
+                    body_parts.append((chunk, False))
+
+        r_speaker = p.add_run(speaker_part)
+        r_speaker.font.name = "함초롬바탕"
+        _set_eastasia_font(r_speaker._element.get_or_add_rPr())
+
+        for txt, is_paren in body_parts:
+            r = p.add_run(txt)
+            r.font.name = "함초롬바탕"
+            _set_eastasia_font(r._element.get_or_add_rPr())
+            if is_paren:
+                r.bold = False
+        return p
+
+    def add_blank_line():
+        p = doc.add_paragraph(style='지문')
+        r = p.add_run("")
+        r.font.name = "함초롬바탕"
+        r.font.size = Pt(10)
+        _set_eastasia_font(r._element.get_or_add_rPr())
+        return p
+
+    def add_insert_block(header, body_lines):
+        doc.add_paragraph("")
+        first_p = doc.add_paragraph(style='인서트헤더')
+        r = first_p.add_run(header.strip())
+        r.font.name = "함초롬바탕"
+        _set_eastasia_font(r._element.get_or_add_rPr())
+        for line in body_lines:
+            line = line.strip()
+            if not line:
+                continue
+            p = doc.add_paragraph(style='인서트본문')
+            r = p.add_run(line)
+            r.font.name = "함초롬바탕"
+            r.italic = True
+            _set_eastasia_font(r._element.get_or_add_rPr())
+        close_p = doc.add_paragraph(style='인서트헤더')
+        cr = close_p.add_run('[/INSERT]')
+        cr.font.name = "함초롬바탕"
+        _set_eastasia_font(cr._element.get_or_add_rPr())
+        doc.add_paragraph("")
+        return first_p
+
+    def add_insert_label(s):
+        label, body = _parse_insert_label(s)
+        p = doc.add_paragraph(style='인서트라벨')
+        r_label = p.add_run(label + ' ')
+        r_label.font.name = "함초롬바탕"
+        r_label.font.size = Pt(9)
+        r_label.bold = True
+        _set_eastasia_font(r_label._element.get_or_add_rPr())
+        if body:
+            r_body = p.add_run(body)
+            r_body.font.name = "함초롬바탕"
+            r_body.italic = True
+            _set_eastasia_font(r_body._element.get_or_add_rPr())
+        return p
+
+    def add_action(s):
+        items = _parse_insert_blocks(s)
+        first_p = None
+        for item in items:
+            if item['type'] == 'insert_block':
+                p = add_insert_block(item['data']['header'], item['data']['body'])
+            elif item['type'] == 'insert_label':
+                p = add_insert_label(item['data'])
+            else:
+                sub_paragraphs = _split_action_paragraph(item['data'])
+                p = None
+                for sub in sub_paragraphs:
+                    sp = doc.add_paragraph(style='지문')
+                    r = sp.add_run(sub)
+                    r.font.name = "함초롬바탕"
+                    _set_eastasia_font(r._element.get_or_add_rPr())
+                    if p is None:
+                        p = sp
+            if first_p is None:
+                first_p = p
+        return first_p
+
+    def add_episode_heading(ep_num):
+        """EP 분리 페이지 헤더."""
+        doc.add_page_break()
+        p = doc.add_paragraph(style='에피소드헤더')
+        r = p.add_run(f"EPISODE {ep_num}")
+        r.font.name = "함초롬바탕"
+        _set_eastasia_font(r._element.get_or_add_rPr())
+        return p
+
+    def add_beat_heading(s):
+        """비트 구분 헤더 (예: 'EP1 — Beat 0. Cold Opening')."""
+        p = doc.add_paragraph(style='비트헤더')
+        r = p.add_run(s)
+        r.font.name = "함초롬바탕"
+        _set_eastasia_font(r._element.get_or_add_rPr())
+        return p
+
+    # ── 커버 페이지 ──
+    for _ in range(6):
+        doc.add_paragraph("")
+    add_text("시나리오", size=Pt(11), align=WD_ALIGN_PARAGRAPH.CENTER)
+    doc.add_paragraph("")
+    add_text(title or "<무제>", bold=True, size=Pt(24), align=WD_ALIGN_PARAGRAPH.CENTER)
+    doc.add_paragraph("")
+
+    # 부제 (시즌 + 부수 + 장르)
+    subtitle_parts = []
+    if mode == "season" and num_episodes:
+        subtitle_parts.append(f"시즌 1 — {num_episodes}부작")
+    if genre:
+        subtitle_parts.append(genre)
+    if subtitle_parts:
+        add_text(" · ".join(subtitle_parts), size=Pt(12),
+                 align=WD_ALIGN_PARAGRAPH.CENTER,
+                 color=RGBColor(0x66, 0x66, 0x66))
+        doc.add_paragraph("")
+
+    doc.add_paragraph("")
+    add_text("기획/제작 | 블루진픽처스", size=Pt(10),
+             align=WD_ALIGN_PARAGRAPH.CENTER,
+             color=RGBColor(0x8E, 0x8E, 0x99))
+    progress = f"  ·  {beats_done_count}비트" if beats_done_count else ""
+    add_text(f"Series Engine {ENGINE_VERSION}{progress}",
+             size=Pt(9), align=WD_ALIGN_PARAGRAPH.CENTER,
+             color=RGBColor(0x8E, 0x8E, 0x99))
+    doc.add_page_break()
+
+    # ── 면책 자막 페이지 ──
+    _need_disclaimer = fact_based or (
+        historical and (
+            "팩션" in (historical_type or "") or "퓨전" in (historical_type or "")
+            or "faction" in (historical_type or "").lower()
+            or "fusion" in (historical_type or "").lower()
+        )
+    )
+    if _need_disclaimer:
+        for _ in range(10):
+            doc.add_paragraph("")
+        add_text("본 작품에 등장하는 인물, 단체, 지명, 상호, 사건은",
+                 size=Pt(11), align=WD_ALIGN_PARAGRAPH.CENTER)
+        add_text("모두 허구이며, 실존하는 것과 관련이 있더라도",
+                 size=Pt(11), align=WD_ALIGN_PARAGRAPH.CENTER)
+        add_text("극적 구성을 위해 각색되었습니다.",
+                 size=Pt(11), align=WD_ALIGN_PARAGRAPH.CENTER)
+        doc.add_paragraph("")
+        add_text("All characters, organizations, places, and events in this work",
+                 size=Pt(9), align=WD_ALIGN_PARAGRAPH.CENTER,
+                 color=RGBColor(0x8E, 0x8E, 0x99))
+        add_text("are fictional. Any resemblance to actual persons or events is",
+                 size=Pt(9), align=WD_ALIGN_PARAGRAPH.CENTER,
+                 color=RGBColor(0x8E, 0x8E, 0x99))
+        add_text("dramatized for narrative purposes.",
+                 size=Pt(9), align=WD_ALIGN_PARAGRAPH.CENTER,
+                 color=RGBColor(0x8E, 0x8E, 0x99))
+        doc.add_page_break()
+
+    # ── 본문 파싱 ──
+    # PROP 메모 / GENRE_*_CHECK 태그 strip
+    text = _strip_prop_state_memos(text)
+
+    # 정규식 패턴
+    heading_re = re.compile(
+        r'^S?#?\d*\.?\s*(INT\.|EXT\.|INT\./EXT\.)\s*(.+)',
+        re.IGNORECASE,
+    )
+    char_re = re.compile(
+        r'^\s{2,}([가-힣a-zA-Z\s]{1,15}?)\s*'
+        r'(?:\((V\.O\.|O\.S\.|CONT\'D|cont\'d|v\.o\.|o\.s\.)\))?\s*$',
+        re.IGNORECASE,
+    )
+    inline_dialogue_re = re.compile(
+        r'^([가-힣a-zA-Z\s]{1,15}?)\s*'
+        r'(?:\((V\.O\.|O\.S\.|CONT\'D|cont\'d|v\.o\.|o\.s\.)\))?\s*'
+        r'\t{1,}\s*(?:\(([^)]*)\)\s*)?(.+)',
+        re.IGNORECASE,
+    )
+    paren_re = re.compile(r'^\s{2,}\((.+?)\)\s*$')
+    divider_re = re.compile(r'^(═{3,}|─{3,}|={3,}|---)')
+
+    # EP 분리 마커 (Series 전용): "EPISODE N" 라인 + 위/아래 ===== 구분선
+    ep_marker_re = re.compile(r'^EPISODE\s+(\d+)\s*$')
+    # 비트 헤더 마커: "EP1 — Beat 0. Cold Opening" 또는 "Beat 1 — ..."
+    beat_marker_re = re.compile(r'^(?:EP\d+\s*[—\-]\s*)?Beat\s+\d+', re.IGNORECASE)
+
+    # ── 메타 차단 필터 ──
+    # ★ v1.9.1 — 정규식 prefix에 마크다운 bold(**) 마커 흡수 추가
+    # AI가 출력 시 ` - ⭐ **본질 검증**: ` 같은 마크다운 강조를 섞어 쓰는 경우가
+    # 「수비니어샵」 실측에서 44건 누출됐기 때문에 ** 마커 양쪽 흡수가 필수.
+    # ★ v1.9.2 — catastrophic backtracking 방지
+    # nested quantifier (`(?:...+\**)*`) 가 `═` 39개 같은 입력에서 폭발했음.
+    # prefix 부분을 단일 character class 한 번에 흡수하는 형태로 평탄화.
+    META_PREFIX_PATTERNS = _SERIES_META_PREFIX_PATTERNS
+    META_LINE_RE = re.compile(
+        r'^[\s•·\-*⭐★─═□☑✓①②③④⑤⑥⑦⑧⑨⑩]{0,40}\s*\**\s*'
+        r'(' + '|'.join(re.escape(p) for p in META_PREFIX_PATTERNS) + r')'
+        r'\**(?:\s|[:\-—.(]|$)',
+        re.IGNORECASE,
+    )
+    META_DEV_NOTATION_RE = re.compile(
+        r'\((?:Beat\s*\d+|S#\s*\d+|전체|전반|후반)[^)]*'
+        r'(?:plant|payoff|→|->)[^)]*\)',
+        re.IGNORECASE,
+    )
+    META_DEV_COMMENT_RE = re.compile(
+        r'^[\s•·\-*]+.*?\(S#\s*\d+(?:[/,]\s*\d+)*\)\s*(?:—|-|–)\s*'
+        r'(?:미공개|미등장|미해결|공개|폭로|열린|유지|부재)',
+        re.IGNORECASE,
+    )
+    META_IRONY_COMMENT_RE = re.compile(
+        r'\(관객\s*[OX].*?(?:유진|주인공|캐릭터|클레어|관객)\s*[OX][^)]*\)\s*(?:—|-|–)\s*'
+        r'(?:미공개|미등장|미해결|공개|유지)',
+    )
+    META_CHARACTER_SUMMARY_RE = re.compile(
+        r'^[\s•·\-*]+\s*([가-힣]+(?:[·∙・]\s*[가-힣]+)*(?:\s*커플)?)\s*:',
+    )
+    META_BULLET_DEV_RE = re.compile(
+        r'^[\s•·\-*]+.*?\((?:Beat\s*\d+|S#\s*\d+)[^)]*\)\s*:',
+        re.IGNORECASE,
+    )
+    # Series 전용: "□ XXX: YES/NO" 형태 (장르 강제 체크 4축)
+    META_CHECKBOX_RE = re.compile(
+        r'^[\s]*□\s*[가-힣A-Za-z]',
+    )
+    # Series 전용: snake_case 그룹 라벨 ("absolute_goal:" 등)
+    META_SNAKECASE_RE = re.compile(
+        r'^[\s•·\-*]*\s*([a-z]+(?:_[a-z]+)+)\s*[:\-—]',
+    )
+    # Series 전용: "맥거핀 N:" 또는 "캐릭터의 비밀:" 식 콜론 메타
+    # ★ v1.9.1 — 마크다운 ** 마커 흡수
+    META_COLON_HEADER_RE = re.compile(
+        r'^[\s•·\-*]*\**\s*(맥거핀\s*\d*|캐릭터\s*비밀|핵심\s*장소|모티프|열린\s*질문|'
+        r'(?:[가-힣]{2,4})\s*의?\s*비밀|시즌\s*비밀|중간\s*비밀|에피소드\s*비밀)\**\s*:',
+    )
+
+    def is_meta_line(s):
+        if not s:
+            return False
+        if META_LINE_RE.match(s):
+            return True
+        if re.match(r'^[\s•·\-*⭐★─═]+\s*([a-z]+_[a-z_]+)', s):
+            return True
+        if META_BULLET_DEV_RE.match(s):
+            return True
+        if META_CHARACTER_SUMMARY_RE.match(s):
+            return True
+        if META_DEV_NOTATION_RE.search(s):
+            return True
+        if META_DEV_COMMENT_RE.match(s):
+            return True
+        if META_IRONY_COMMENT_RE.search(s):
+            return True
+        if META_CHECKBOX_RE.match(s):
+            return True
+        if META_SNAKECASE_RE.match(s):
+            return True
+        if META_COLON_HEADER_RE.match(s):
+            return True
+        return False
+
+    # ── 캐릭터명 형식 붕괴 복구 ──
+    # AI가 "캐릭터\n\n대사" 형식으로 출력한 경우 "캐릭터\t\t대사"로 복구.
+    # Series 전용 — 캐릭터명 자동 추출 (한국어 2~5자 이름 패턴)
+    _series_char_pattern = re.compile(r'^[가-힣]{2,5}$')
+
+    def _is_likely_char_name(s):
+        """줄 단독으로 등장한 텍스트가 캐릭터명일 가능성 판정."""
+        s = s.strip()
+        if not s or len(s) > 12:
+            return False
+        if not _series_char_pattern.match(s):
+            return False
+        # 흔한 비-캐릭터 명사 배제
+        excluded = {'그리고', '하지만', '그러나', '그래서', '그러면', '왜냐하면',
+                    '결국', '갑자기', '마침내', '여전히', '아직도', '이제는',
+                    '그날', '그때', '그곳', '여기', '저기', '거기'}
+        if s in excluded:
+            return False
+        return True
+
+    _broken_lines = text.split("\n")
+    _fixed_lines = []
+    _j = 0
+    while _j < len(_broken_lines):
+        _cur = _broken_lines[_j].strip()
+        if (_is_likely_char_name(_cur) and
+                _j + 2 < len(_broken_lines) and
+                _broken_lines[_j + 1].strip() == "" and
+                _broken_lines[_j + 2].strip() and
+                not _broken_lines[_j + 2].strip().startswith("S#") and
+                not _is_likely_char_name(_broken_lines[_j + 2].strip())):
+            _next_content = _broken_lines[_j + 2].strip()
+            if (_next_content.startswith("(") and _next_content.endswith(")")
+                    and _j + 4 < len(_broken_lines)
+                    and _broken_lines[_j + 3].strip() == ""
+                    and _broken_lines[_j + 4].strip()):
+                _fixed_lines.append(
+                    f"{_cur}\t\t{_next_content} {_broken_lines[_j + 4].strip()}"
+                )
+                _j += 5
+                continue
+            _fixed_lines.append(f"{_cur}\t\t{_next_content}")
+            _j += 3
+            continue
+        _fixed_lines.append(_broken_lines[_j])
+        _j += 1
+    lines = _fixed_lines
+
+    # ── 본문 변환 루프 ──
+    i = 0
+    prev_block_type = None  # "scene" | "action" | "dialogue" | "insert" | "ep" | "beat"
+
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+
+        # 빈 줄
+        if not stripped:
+            i += 1
+            continue
+
+        # ── Series 전용 EP 분리 마커 ──
+        # 위 라인이 ===== 구분선, 현 라인이 "EPISODE N", 다음 라인이 ===== 면 EP 분리
+        if ep_marker_re.match(stripped):
+            ep_match = ep_marker_re.match(stripped)
+            ep_num = ep_match.group(1)
+            add_episode_heading(ep_num)
+            prev_block_type = "ep"
+            i += 1
+            continue
+
+        # ── Series 전용 비트 헤더 마커 ──
+        # "EP1 — Beat 0. Cold Opening" 또는 "═══════ Beat 1 ═══════" 식
+        if beat_marker_re.match(stripped):
+            add_beat_heading(stripped)
+            prev_block_type = "beat"
+            i += 1
+            continue
+
+        # ── WRITER_NOTES 마커 블록 스킵 ──
+        if "<WRITER_NOTES_BEGIN>" in stripped or "WRITER_NOTES_BEGIN" in stripped:
+            i += 1
+            while i < len(lines):
+                if ("<WRITER_NOTES_END>" in lines[i] or "WRITER_NOTES_END" in lines[i]):
+                    i += 1
+                    break
+                i += 1
+            continue
+
+        if "<SPACE_DIVERSITY_CHECK>" in stripped or "SPACE_DIVERSITY_CHECK" in stripped:
+            i += 1
+            while i < len(lines):
+                if "</SPACE_DIVERSITY_CHECK>" in lines[i] or (
+                    "SPACE_DIVERSITY_CHECK" in lines[i] and "</" in lines[i]
+                ):
+                    i += 1
+                    break
+                i += 1
+            continue
+
+        if stripped.startswith("[BLOCK 2:") or stripped.startswith("[BLOCK 2 "):
+            i = len(lines)
+            continue
+        if stripped == "[BLOCK 1: 시나리오 본문]" or stripped.startswith("[BLOCK 1:"):
+            i += 1
+            continue
+        if stripped.startswith("━━━"):
+            i += 1
+            continue
+
+        # 구분선 스킵 (--- / ═══ / === 등)
+        # ★ v1.9.1 — 보수적 스킵 변경
+        # 기존: divider 만나면 무조건 다음 헤딩까지 모두 스킵 → '--- TITLE ---' 같은
+        #       정상 본문 다음 줄들도 사라지는 부작용
+        # 개선: 다음 줄이 명백한 메모 신호(내부 메모/비트 요약/snake_case 등)일 때만
+        #       블록 스킵. 아니면 구분선만 한 줄 버리고 다음 줄부터 정상 처리.
+        if divider_re.match(stripped):
+            # 다음 비-빈 줄 확인
+            _peek_j = i + 1
+            while _peek_j < len(lines) and not lines[_peek_j].strip():
+                _peek_j += 1
+            _next_line = lines[_peek_j].strip() if _peek_j < len(lines) else ""
+
+            # 다음 줄이 명백한 메모 신호인지 판정
+            _is_memo_block = False
+            if _next_line:
+                if "내부 메모" in _next_line:
+                    _is_memo_block = True
+                elif "비트 요약" in _next_line or "비트요약" in _next_line:
+                    _is_memo_block = True
+                elif is_meta_line(_next_line):
+                    _is_memo_block = True
+                elif re.match(r'^[\s•·\-*]*\**[a-z]+_[a-z]+', _next_line):
+                    _is_memo_block = True
+
+            if _is_memo_block:
+                # 메모 블록 — 다음 헤딩까지 스킵
+                i += 1
+                while i < len(lines):
+                    memo_line = lines[i].strip()
+                    if heading_re.match(memo_line):
+                        break
+                    if ep_marker_re.match(memo_line):
+                        break
+                    if beat_marker_re.match(memo_line):
+                        break
+                    if "Beat " in memo_line and "—" in memo_line:
+                        break
+                    i += 1
+                continue
+            else:
+                # 단순 구분선 — 그 줄만 버림
+                i += 1
+                continue
+
+        # "내부 메모" 블록 스킵
+        if "내부 메모" in stripped:
+            i += 1
+            while i < len(lines):
+                memo_line = lines[i].strip()
+                if heading_re.match(memo_line):
+                    break
+                if ep_marker_re.match(memo_line):
+                    break
+                if beat_marker_re.match(memo_line):
+                    break
+                i += 1
+            continue
+
+        # 개별 메타 라인 차단
+        if is_meta_line(stripped):
+            i += 1
+            continue
+
+        # "═" 또는 "Beat N — ..." 형태의 Beat 헤더 (메타 표기)
+        # — beat_marker_re는 이미 위에서 처리되었으므로 여기는 보조 스킵
+        if stripped.startswith("═"):
+            i += 1
+            continue
+
+        # ── 씬 헤딩 ──
+        m = heading_re.match(stripped)
+        if m:
+            add_scene_heading(stripped)
+            prev_block_type = "scene"
+            i += 1
+            continue
+
+        # ── 인라인 대사 ──
+        im = inline_dialogue_re.match(stripped)
+        if im:
+            char_name = im.group(1).strip()
+            vo_marker = im.group(2) or ""
+            inline_paren = im.group(3) or ""
+            inline_text = im.group(4).strip()
+            if vo_marker:
+                char_name = f"{char_name} ({vo_marker})"
+            if prev_block_type in ("action", "insert"):
+                add_blank_line()
+            add_dialogue(char_name, inline_paren, inline_text)
+            prev_block_type = "dialogue"
+            i += 1
+            continue
+
+        # ── 캐릭터명 + 들여쓰기 대사 ──
+        cm = char_re.match(line)
+        if cm:
+            char_name = cm.group(1).strip()
+            vo_marker = cm.group(2) or ""
+            if vo_marker:
+                char_name = f"{char_name} ({vo_marker})"
+            parenthetical = ""
+            dialogue_lines = []
+            if prev_block_type in ("action", "insert"):
+                add_blank_line()
+            i += 1
+
+            if i < len(lines):
+                pm = paren_re.match(lines[i])
+                if pm:
+                    parenthetical = pm.group(1)
+                    i += 1
+
+            while i < len(lines):
+                dl = lines[i]
+                ds = dl.strip()
+                if not ds:
+                    break
+                if heading_re.match(ds):
+                    break
+                if ep_marker_re.match(ds):
+                    break
+                if beat_marker_re.match(ds):
+                    break
+                if char_re.match(dl):
+                    break
+                if inline_dialogue_re.match(ds):
+                    break
+                dialogue_lines.append(ds)
+                i += 1
+
+            if dialogue_lines:
+                merged_parts = []
+                current_dialogue = []
+                for dl in dialogue_lines:
+                    dl_s = dl.strip()
+                    if (dl_s.startswith("(") and dl_s.endswith(")")
+                            and len(dl_s) > 2):
+                        if current_dialogue:
+                            merged_parts.append(("dialogue", " ".join(current_dialogue)))
+                            current_dialogue = []
+                        merged_parts.append(("action", dl_s))
+                    else:
+                        current_dialogue.append(dl_s)
+                if current_dialogue:
+                    merged_parts.append(("dialogue", " ".join(current_dialogue)))
+
+                first = True
+                for part_type, part_text in merged_parts:
+                    if part_type == "dialogue":
+                        if first:
+                            add_dialogue(char_name, parenthetical, part_text)
+                            parenthetical = ""
+                            first = False
+                        else:
+                            add_dialogue(char_name, "", part_text, continuation=True)
+                    else:
+                        add_blank_line()
+                        add_action(part_text)
+                        add_blank_line()
+                        first = True
+                if first:
+                    add_dialogue(char_name, parenthetical, "")
+            else:
+                add_dialogue(char_name, parenthetical, "")
+            prev_block_type = "dialogue"
+            continue
+
+        # ── 일반 지문 ──
+        if prev_block_type == "dialogue":
+            add_blank_line()
+        add_action(stripped)
+        prev_block_type = "action"
+        i += 1
+
+    # ── 푸터 ──
+    section = doc.sections[0]
+    footer = section.footer
+    fp = footer.paragraphs[0]
+    fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    fr = fp.add_run(f"BLUE JEANS SERIES ENGINE {ENGINE_VERSION} · BLUE JEANS PICTURES")
+    fr.font.size = Pt(7)
+    fr.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+
+    doc.add_page_break()
+    add_text(f"© 2026 BLUE JEANS PICTURES · Series Engine {ENGINE_VERSION}",
+             size=Pt(8), align=WD_ALIGN_PARAGRAPH.CENTER,
+             color=RGBColor(0x8E, 0x8E, 0x99))
+
+    buf = BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
 
 
 # ══════════════════════════════════════════════
@@ -920,7 +2216,7 @@ if mode == "🔄 리라이트":
             st.rerun()
 
     st.markdown("---")
-    st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.8")
+    st.caption(f"© 2026 BLUE JEANS PICTURES · Series Engine {ENGINE_VERSION}")
     st.stop()
 
 
@@ -1441,6 +2737,11 @@ if st.session_state["episode_plans"]:
                 inputs_with_beats = dict(st.session_state["inputs"])
                 inputs_with_beats["_episode_beats"] = st.session_state.get("episode_beats", {})
 
+                # ★ v2.0 — 시즌 표현 누적 DB (없으면 빈 dict)
+                if "season_expression_db" not in st.session_state:
+                    st.session_state["season_expression_db"] = {}
+                _season_expr_db = st.session_state["season_expression_db"]
+
                 prompt = build_write_episode_beat_prompt(
                     inputs_with_beats,
                     st.session_state["season_arc"],
@@ -1453,10 +2754,18 @@ if st.session_state["episode_plans"]:
                     producer_notes=st.session_state.get("producer_notes_write", ""),
                     prev_beat_structure_type=prev_struct,
                     episode_context_summary=ep_summary,
+                    season_expression_db=_season_expr_db,  # v2.0
                 )
                 with st.spinner(f"EP{selected_ep} Beat {next_beat}을 집필하고 있습니다..."):
                     result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_BEAT)
                 st.session_state["episode_beats"][bk(selected_ep, next_beat)] = result
+
+                # ★ v2.0 — 시즌 표현 누적 DB 갱신
+                update_season_expression_db(
+                    st.session_state["season_expression_db"],
+                    result, selected_ep, next_beat,
+                )
+
                 # v1.7: 비트 구조 유형 자동 추출
                 if "beat_structure_types" not in st.session_state:
                     st.session_state["beat_structure_types"] = {}
@@ -1550,6 +2859,7 @@ _BACKUP_KEYS = [
     "ep_characters",
     "locked_items", "open_items",
     "producer_notes_write",
+    "season_expression_db",  # v2.0
 ]
 
 
@@ -1558,7 +2868,7 @@ def _export_session_backup() -> bytes:
     payload = {
         "_meta": {
             "engine": "Series Engine",
-            "engine_version": "v1.8",
+            "engine_version": ENGINE_VERSION,
             "saved_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
             "genre": st.session_state.get("genre", ""),
             "num_episodes": st.session_state.get("num_episodes", 8),
@@ -1700,4 +3010,4 @@ with st.expander("⚠️ 전체 초기화", expanded=False):
         st.rerun()
 
 st.markdown("---")
-st.caption("© 2026 BLUE JEANS PICTURES · Series Engine v1.8")
+st.caption(f"© 2026 BLUE JEANS PICTURES · Series Engine {ENGINE_VERSION}")

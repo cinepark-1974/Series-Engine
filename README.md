@@ -1,15 +1,15 @@
-# 👖 BLUE JEANS SERIES ENGINE v1.7
+# 👖 BLUE JEANS SERIES ENGINE v2.0
 
 **Netflix 미니시리즈/시리즈(시즌 1) 시나리오 집필 엔진**
 
-> BLUE JEANS PICTURES · Series Writing Pipeline  
-> Creator Engine → **Series Engine** → Rewrite Engine
+> BLUE JEANS PICTURES · Series Writing Pipeline
+> Creator Engine → **Series Engine** → Writer Engine / Rewrite Engine
 
 ---
 
 ## 한 줄 정의
 
-시즌 아크 → **시리즈 확장(캐릭터·사건 보강)** → 에피소드 씬 플랜 → 비트 단위 집필 구조 위에 **Planting & Payoff 시리즈 맵, AI Escape A1~A10, Genre Drive 5-point Check, 비트 구조 변주 6유형, Villain 4 Questions**, 클리프행어 시스템, 비밀 경제, 앙상블 캐릭터, 멀티 스토리라인 직조, 서사동력 프레임워크, LOCKED 설정 보호를 중첩 제어하여 **"매 회 끝에 다음 회를 안 볼 수 없는 시리즈 시나리오"**를 쓰는 집필 엔진.
+시즌 아크 → 시리즈 확장(캐릭터·사건 보강) → 에피소드 씬 플랜 → 비트 단위 집필 구조 위에 **OPENING/MIDSEASON TWIST/LOWEST POINT/FINALE MASTERY 4종, 9장르 GENRE BOOSTER, INSERT 시스템, PROP 연속성 추적, 시즌 표현 누적 차단, 회별 사건/시즌 비중 자동 조정, 한국 시나리오 표준 양식 DOCX 빌더**를 중첩 제어하여 "매 회 끝에 다음 회를 안 볼 수 없는 시리즈 시나리오"를 쓰는 집필 엔진.
 
 ---
 
@@ -17,8 +17,10 @@
 
 ```
 series-engine/
-├── main.py              (1,384줄) — Streamlit 메인 앱
-├── prompt.py            (1,657줄) — 시리즈 작법 원칙 + 빌더 함수
+├── main.py              (3,013줄) — Streamlit 메인 앱 + DOCX 양식 빌더
+├── prompt.py            (3,386줄) — 시리즈 작법 원칙 + 빌더 함수 + v2.0 모듈
+├── profession_pack.py   (2,586줄) — 직업 디테일 자동 주입
+├── period_pack.py       (1,605줄) — 시대 디테일 자동 주입
 ├── requirements.txt     — streamlit, anthropic, python-docx
 └── .streamlit/
     └── config.toml      — 라이트모드 (Creator Engine 통일)
@@ -32,107 +34,123 @@ series-engine/
 | streamlit | ≥1.30 |
 | anthropic | ≥0.40 |
 | python-docx | ≥1.0 |
-| 집필 모델 | claude-opus-4-6 |
-| 구조 모델 | claude-sonnet-4-6 |
+| 집필 모델 | claude-opus-4-6 (Opus = WRITE) |
+| 구조 모델 | claude-sonnet-4-6 (Sonnet = ANALYZE) |
 | API KEY | ANTHROPIC_API_KEY (Streamlit Secrets) |
 
 ## 배포
 
-1. GitHub에 `cinepark-1974/series-engine` 레포 생성
-2. 4개 파일 push (main.py, prompt.py, requirements.txt, .streamlit/config.toml)
-3. Streamlit Cloud에서 New app → 레포 연결 → main branch → main.py
-4. Secrets에 `ANTHROPIC_API_KEY` 설정
-5. Deploy
+1. GitHub `cinepark-1974/series-engine` 레포 main 브랜치에 푸시
+2. Streamlit Cloud 자동 재배포 (1~2분)
+3. Secrets에 `ANTHROPIC_API_KEY` 설정 (한 번만)
 
-## 파이프라인 (6단계 — v1.7 확장)
+## 파이프라인 (5단계)
 
 ```
 STEP 1: 자료 입력
-  Creator Engine 9칸 붙여넣기 + 에피소드 수(6/8) + 분량(40/50/60분) + 장르
-  + LOCKED/OPEN 설정 잠금
+  Creator Engine 9칸 붙여넣기 또는 Creator JSON 업로드 자동 채우기
+  + 에피소드 수(6/8) + 분량(40/50/60분) + 장르 + LOCKED/OPEN 설정 잠금
      ↓
 STEP 2: 시즌 아크 설계 (Sonnet) ← 1회 클릭
   → 시즌 비트 / 시즌 질문 / Secret Map / 클리프행어 / 멀티라인 / 서사동력
-  → ★ Plant-Payoff 시리즈 맵 (6쌍 이상)
-  → ★ 캐릭터 부족 진단
+  → Plant-Payoff 시리즈 맵 (6쌍 이상)
+  → ★ v2.0 — 회별 마스터리 사전 인지 (EP1/EP4/EP6/EP8)
+  → ★ v2.0 — 회별 사건/시즌 비중 가이드 자동 주입
      ↓
-STEP 2.5: 시리즈 확장 (Sonnet) ← 3회 클릭 ★v1.7 신규★
-  2.5a 캐릭터 확장 → 부족한 인물 생성 (간이 바이블 + 기능적 조연)
-  2.5b 사건 보강 → 빈 구간 분석 + 에스컬레이션 구체화
-  2.5c 핵심 요소 + Plant-Payoff 맵 추출 → 매 비트 강제 주입
+STEP 2.5: 시리즈 확장 (Sonnet) ← 3회 클릭
+  2.5a 캐릭터 확장 / 2.5b 사건 보강 / 2.5c 핵심 요소 + Plant-Payoff 맵
      ↓
 STEP 3: 에피소드별 씬 플랜 (Sonnet) ← 에피소드당 1회 클릭
-  → 콜드 오프닝 + 8비트 + 클리프행어 + [A]/[B]/[C]/[BR]/[CUT] 씬 타입
-  → ★ 비트 구조 변주 6유형 배정
-  → ★ Plant-Payoff 배치
-  → ★ 기능적 조연 배치
+  → Cold Opening + 8비트 + 클리프행어 + 5종 씬 타입
+  → ★ v2.0 — EP 단위 씬 번호 연속 채번 강제
+  → ★ v2.0 — "(연속)" 표기 금지, CUT TO / CLOSE UP / INSERT 가이드
+  → ★ v2.0 — EP1/EP4/EP6/EP8 마스터리 힌트 자동 주입
      ↓
 STEP 4: 비트별 집필 (Opus) ← 에피소드당 8비트 = 8회 클릭
   → SCOPE MANDATE + 5단계 서술 구조 + 빌런 추적 + LOCKED 검증
-  → ★ Genre Drive 5-point Check
-  → ★ AI Escape A1~A10 자가 점검
-  → ★ 비트 구조 변주 연속 방지
-  → ★ 프로듀서 노트 주입
-  → ★ 컨텍스트 오버플로 대응 (에피소드 요약 캐시)
-  + 마지막 비트 다시 쓰기 (Opus)
+  → Genre Drive 5점 + AI Escape A1~A17 + 비트 구조 변주
+  → ★ v2.0 — 직전 비트 마지막 씬 번호 자동 추출 → S#(N+1)부터 강제
+  → ★ v2.0 — INSERT 시스템 + PROP 연속성 + GENRE BOOSTER + HELPER 룰 자동 주입
+  → ★ v2.0 — 회별 마스터리 모듈 자동 분기 (EP1·EP4·EP6·EP8)
+  → ★ v2.0 — 시즌 표현 누적 DB 자동 추출·차단 (AI Escape A17 해결)
      ↓
 STEP 5: 다운로드
+  → ★ v2.0 — 한국 시나리오 표준 양식 DOCX (Writer Engine 양식 정합)
+  → 시즌 표지 + EP 분리 페이지 + 비트 헤더 + 씬번호/대사/지문/INSERT 자동 양식화
   → 에피소드별 TXT/DOCX + 시즌 전체 TXT/DOCX
 ```
 
-**총 클릭 수 (8부작 기준):** 시즌 아크 1 + 시리즈 확장 3 + 씬 플랜 8 + 집필 64 = **76회**
+## v2.0 본 작업 — 신규 기능 전체 목록
 
-## v1.7 업그레이드 상세 (18개 기능)
-
-### prompt.py 신규 기능 (12개)
+### prompt.py 신규 (10개)
 
 | # | 기능 | 설명 |
 |---|------|------|
-| 1 | **Planting & Payoff 시리즈 맵** | 시즌 전체 6쌍 이상. 캐릭터/관계/세계관 각 2개. EP1~2 심기, EP5~8 회수 |
-| 2 | **AI Escape A1~A10** | 감정설명지문, 같은말투, 본것반복, 무대연출, 편의적정보, 침묵부재, 대사대칭, 처음시작, 같은씬해소, 총칭감각 |
-| 3 | **Genre Drive 5-point Check** | 정보비대칭, 에스컬레이션, 적대자승패, 타이머, 장르쾌감 |
-| 4 | **비트 구조 변주 6유형** | INV/CON/REV/EMO/ACT/SIL — 2막 반복 패턴 방지 |
-| 5 | **Action Idea 검증** | 매 비트가 핵심 행동을 향해 전진하는지 체크 |
-| 6 | **Genre Rule Pack 9장르×12필드** | 미스터리 추가, must_have/hook_rule/punch_rule/setpiece 필드 |
-| 7 | **Villain 4 Questions** | 흥미/다크미러/계획파괴/승률 — Creator Engine v1.9 통합 |
-| 8 | **기능적 조연 규칙** | 정보전달자, 관점제공자, 대가체감자, 이완감초 |
-| 9 | **em dash / 볼드 금지** | 시나리오 plain text 품질 |
-| 10 | **대사 형식 규칙** | 같은 캐릭터 연속 대사 금지 |
-| 11 | **서사동력 비트별 추적** | Goal↔Need 간극 EP별 진행 |
-| 12 | **프로듀서 노트 집필모드** | 모든 비트 집필에 프로듀서 노트 자동 주입 |
+| 1 | **INSERT_SYSTEM_MODULE** | 카톡·문자·SNS·뉴스 화면 텍스트 자동 양식화 |
+| 2 | **PROP_CONTINUITY_MODULE** | 소품 연속성 추적 + 시즌 누적 추적 |
+| 3 | **GENRE_BOOSTER 9장르** | 스릴러/호러/액션/로맨스/코미디/드라마/SF/판타지/미스터리 — 각 10필수장치 |
+| 4 | **HELPER_CHARACTER_RULE** | 조력자 5씬 연속 등장 금지 + 4역할 검증 |
+| 5 | **EPISODE_FOCUS_RATIO** | 회별 사건/시즌 비중 자동 조정 (EP1=30/70, EP4=40/60, EP6=50/50, EP8=20/80) |
+| 6 | **FINALE_MASTERY_MODULE** | EP8 — EP1 수미상관 + Plant 회수 + 시즌 질문 답 강제 |
+| 7 | **MIDSEASON_TWIST_MASTERY_MODULE** | EP4(8부작)/EP3(6부작) — 시즌 전제 뒤집기 + EP1~3 단서 재해석 |
+| 8 | **LOWEST_POINT_MASTERY_MODULE** | EP6(8부작)/EP4(6부작) — 진짜 상실 + 빌런 시즌 최고 우위 |
+| 9 | **get_opening_mastery_v2** | Writer Engine 풀버전 + EP1 분량 2500-4000자 + 빌런 15회 강제 |
+| 10 | **SCENE RULES 강화** | 씬 분할 룰 4종 + 씬 번호 연속 채번 + 대사 형식 ❌/✅ 예시 3종 |
 
-### main.py 신규 기능 (6개)
+### main.py 신규 (6개)
 
 | # | 기능 | 설명 |
 |---|------|------|
-| 13 | **STEP 2.5a 캐릭터 확장** | 시즌 아크 분석 → 부족한 인물 간이 바이블 생성 |
-| 14 | **STEP 2.5b 사건 보강** | 빈 구간 분석 + B-Story 보강 + 에스컬레이션 구체화 |
-| 15 | **STEP 2.5c Plant-Payoff 맵** | 핵심 요소 추출과 통합 |
-| 16 | **프로듀서 노트 UI** | STEP 4에 프로듀서 노트 입력 → 전 비트 주입 |
-| 17 | **컨텍스트 오버플로 대응** | 완료 에피소드 자동 요약 → 토큰 관리 |
-| 18 | **비트 구조 유형 추적** | 출력에서 자동 추출 → 연속 방지 |
+| 11 | **extract_signature_expressions** | 비트 집필 결과에서 18~80자 시그니처 표현 자동 추출 |
+| 12 | **update_season_expression_db** | 시즌 단위 표현 누적 DB 갱신 |
+| 13 | **get_overused_expressions** | 3회 이상 누적된 표현 추출 → 다음 비트 집필 시 차단 |
+| 14 | **사이드바 v2.0 누적 현황** | 시즌 표현 추적 상태 실시간 표시 |
+| 15 | **DOCX 양식 빌더 (v1.9 패치본 유지)** | Writer Engine 양식 정합 — 씬번호/대사/지문/INSERT 자동 분리 |
+| 16 | **백업 JSON에 season_expression_db 추가** | 세션 재개 시 표현 누적 유지 |
+
+### v1.x 기능 유지 (v2.0에도 전부 작동)
+
+- Planting & Payoff 시리즈 맵
+- AI Escape A1~A17 자가 점검
+- Genre Drive 5-point Check
+- 비트 구조 변주 6유형 (INV/CON/REV/EMO/ACT/SIL)
+- Genre Rule Pack 9장르 × 12필드
+- Villain 4 Questions
+- 기능적 조연 규칙 4역할
+- 서사동력 비트별 추적
+- 프로듀서 노트 집필모드
+- 컨텍스트 오버플로 대응 (적응형 컨텍스트)
+- 비트 간 중복 방지 (에피소드 내)
+- Profession Pack (캐릭터 직업 디테일)
+- Period Pack (시대 디테일)
+- LOCKED/OPEN 시스템
+- 리라이트 모드 (독립)
+- Creator Engine JSON 자동 로더
 
 ## 디자인 시스템
 
-Creator Engine과 완전 통일:
+Creator Engine / Writer Engine과 완전 통일:
 - CSS 변수: `--navy: #191970`, `--y: #FFCB05`, `--bg: #F7F7F5`
 - 폰트: Pretendard + Paperlogy + Playfair Display
-- 컴포넌트: 노란 섹션 헤더, 콜아웃, 카드, 5단계 Stepper
+- 사이드바 ENGINE INFO 박스 + v2.0 시즌 표현 누적 현황 박스
 - 브랜드 헤더: `BLUE JEANS PICTURES → SERIES ENGINE → YOUNG·VINTAGE·FREE·INNOVATIVE`
 
 ## 버전 히스토리
 
 | 버전 | 주요 변경 |
 |------|----------|
-| v1.0 | 초기 빌드. 5단계 파이프라인, 시리즈 작법 5대 원칙 |
-| v1.1 | Writer Engine v2.2 통합 (씬 문법, 지문, 대사, 감정 연쇄) |
-| v1.2 | Creator Engine v1.4 통합 (B-Story 강화, 5단계 서술 구조) |
-| v1.3 | SCOPE MANDATE, B-Story 시간축 시각화 |
-| v1.4 | Creator Engine 캐릭터 구조 통합 (characters + extended_characters) |
+| v1.0 | 초기 빌드 — 5단계 파이프라인 |
+| v1.1 | Writer Engine v2.2 통합 |
+| v1.2 | Creator Engine v1.4 통합 |
+| v1.3 | SCOPE MANDATE, B-Story 시간축 |
+| v1.4 | Creator Engine 캐릭터 구조 통합 |
 | v1.5 | 모델 분리 (Opus=집필, Sonnet=구조) |
-| v1.6 | LOCKED/OPEN 시스템, 빌런 추적, 서사동력, 리라이트 모드 |
-| **v1.7** | **18개 기능 업그레이드: P&P 시리즈맵, AI Escape A1~A10, Genre Drive 5점, 비트변주 6유형, 9장르×12필드, Villain 4Q, 시리즈 확장(캐릭터·사건 생성), 프로듀서 노트 집필모드, 컨텍스트 관리** |
+| v1.6 | LOCKED/OPEN, 빌런 추적, 서사동력, 리라이트 모드 |
+| v1.7 | 18개 기능 업그레이드 — P&P 시리즈맵, AI Escape, Genre Drive, 비트변주, 9장르×12필드, Villain 4Q |
+| v1.8 | Profession/Period Pack, 적응형 컨텍스트, 비트 간 중복 방지, Streamlit 안티패턴 안정화 |
+| v1.9 | 한국 시나리오 표준 양식 DOCX 빌더 이식 (Writer Engine 양식 정합) |
+| **v2.0** | **완전한 엔진 — 회별 마스터리 4종, GENRE BOOSTER 9장르, INSERT/PROP 시스템, 시즌 표현 누적 차단, 회별 비중 자동 조정, SCENE RULES 강화 (씬 분할·번호·대사 형식)** |
 
 ---
 
-© 2026 BLUE JEANS PICTURES · Series Engine v1.7
+© 2026 BLUE JEANS PICTURES · Series Engine v2.0
