@@ -1,5 +1,5 @@
 """
-👖 BLUE JEANS SERIES ENGINE v2.0 — main.py
+👖 BLUE JEANS SERIES ENGINE v2.0.1 — main.py
 시즌 아크 → 에피소드 씬 플랜 → 비트 집필 파이프라인
 © 2026 BLUE JEANS PICTURES
 
@@ -10,6 +10,15 @@
   [패치 D] 시즌 표현 누적 차단 시스템 (AI Escape A17 해결)
   + SCENE RULES 강화 (씬 분할 / 씬 번호 / 대사 형식)
   + 회별 사건/시즌 비중 룰 (EPISODE_FOCUS_RATIO)
+
+★ v2.0.1 미세 패치
+  [패치 E] 캐릭터+대사 분리 복구 강화 — 한국 시나리오 표준 양식 정합
+    · 빈 줄 없는 캐릭터/대사 연속 출력 자동 합치기
+    · V.O./O.S./F 등 변형 캐릭터명 인식
+    · 행동 지시(괄호) 한 줄 처리 — Writer Engine 양식 100% 정합
+  [패치 F] DOCX/TXT 파일명 규칙 갱신
+    · 형식: 각본_제목_v1.0_YYYYMMDD_HHMM.docx
+    · 제목 자동 추출 (inputs.title → logline → fallback)
 """
 
 import streamlit as st
@@ -54,7 +63,7 @@ from prompt import (
 # Series Engine 컨텍스트에서 동작하도록 통합.
 # ═══════════════════════════════════════════════════════════
 
-ENGINE_VERSION = "v2.0"
+ENGINE_VERSION = "v2.0.1"
 ENGINE_BUILD_DATE = "2026-05-16"
 
 
@@ -1715,23 +1724,44 @@ def make_series_docx_bytes(
             return True
         return False
 
-    # ── 캐릭터명 형식 붕괴 복구 ──
-    # AI가 "캐릭터\n\n대사" 형식으로 출력한 경우 "캐릭터\t\t대사"로 복구.
-    # Series 전용 — 캐릭터명 자동 추출 (한국어 2~5자 이름 패턴)
-    _series_char_pattern = re.compile(r'^[가-힣]{2,5}$')
+    # ── 캐릭터명 형식 붕괴 복구 (v2.0.1 강화) ──
+    # AI가 다양한 형식으로 출력한 캐릭터+대사 분리를 한 단락으로 복구.
+    # 처리 케이스:
+    #   A) "캐릭터\n\n대사"     — 빈 줄 사이
+    #   B) "캐릭터\n대사"        — 빈 줄 없이 연속  
+    #   C) "캐릭터\n(괄호)\n대사" — 행동 지시 분리
+    #   D) "캐릭터 (V.O.)\n대사" — V.O./O.S./F 같은 변형
+    # 모두 "캐릭터\t\t대사" 또는 "캐릭터\t\t(괄호) 대사" 단일 라인으로 통합.
+    # Series 전용 — 캐릭터명 자동 추출
+    _series_char_pattern = re.compile(
+        r'^([가-힣]{2,8}|[A-Z][a-zA-Z]+|[가-힣]{2,8}\s*#?\d*|남자|여자|위반자|손님|국과수[가-힣\s]*|팀장|반장)'
+        r'\s*(\(\s*[VOF]\.?[OS]?\.?\s*\)|\(\s*F\s*\))?$'
+    )
 
     def _is_likely_char_name(s):
         """줄 단독으로 등장한 텍스트가 캐릭터명일 가능성 판정."""
         s = s.strip()
-        if not s or len(s) > 12:
+        if not s or len(s) > 20:
             return False
-        if not _series_char_pattern.match(s):
+        # 끝의 V.O. / O.S. / F 등 제거 후 본체 검사
+        s_clean = re.sub(r'\s*\(\s*[VOF]\.?[OS]?\.?\s*\)\s*$', '', s).strip()
+        s_clean = re.sub(r'\s*\(\s*F\s*\)\s*$', '', s_clean).strip()
+        if not s_clean or len(s_clean) > 12:
             return False
+        # 한글 2~8자 또는 영문 (대문자 시작)
+        if not re.match(r'^([가-힣]{2,8}|[A-Z][a-zA-Z]+)(\s*#?\d+)?$', s_clean):
+            # 특수 캐릭터명 화이트리스트
+            if s_clean not in {'위반자', '손님', '남자', '여자', '팀장', '반장',
+                              '운영자', '국과수 김 주임', '국과수 담당자', '집행자'}:
+                return False
         # 흔한 비-캐릭터 명사 배제
         excluded = {'그리고', '하지만', '그러나', '그래서', '그러면', '왜냐하면',
                     '결국', '갑자기', '마침내', '여전히', '아직도', '이제는',
-                    '그날', '그때', '그곳', '여기', '저기', '거기'}
-        if s in excluded:
+                    '그날', '그때', '그곳', '여기', '저기', '거기',
+                    '인사동', '서울', '한국', '오늘', '내일', '어제',
+                    '카운터', '카메라', '서랍', '계단', '복도', '문턱',
+                    '아이템', '매뉴얼', '계약서', '정산서', '영수증', '청구서', '처방전'}
+        if s_clean in excluded:
             return False
         return True
 
@@ -1740,27 +1770,59 @@ def make_series_docx_bytes(
     _j = 0
     while _j < len(_broken_lines):
         _cur = _broken_lines[_j].strip()
-        if (_is_likely_char_name(_cur) and
-                _j + 2 < len(_broken_lines) and
-                _broken_lines[_j + 1].strip() == "" and
-                _broken_lines[_j + 2].strip() and
-                not _broken_lines[_j + 2].strip().startswith("S#") and
-                not _is_likely_char_name(_broken_lines[_j + 2].strip())):
-            _next_content = _broken_lines[_j + 2].strip()
-            if (_next_content.startswith("(") and _next_content.endswith(")")
-                    and _j + 4 < len(_broken_lines)
-                    and _broken_lines[_j + 3].strip() == ""
-                    and _broken_lines[_j + 4].strip()):
-                _fixed_lines.append(
-                    f"{_cur}\t\t{_next_content} {_broken_lines[_j + 4].strip()}"
-                )
-                _j += 5
-                continue
-            _fixed_lines.append(f"{_cur}\t\t{_next_content}")
-            _j += 3
+        
+        # 캐릭터명 후보가 아니면 그대로 통과
+        if not _is_likely_char_name(_cur):
+            _fixed_lines.append(_broken_lines[_j])
+            _j += 1
             continue
-        _fixed_lines.append(_broken_lines[_j])
-        _j += 1
+        
+        # 다음 비어있지 않은 줄 찾기
+        _next_idx = _j + 1
+        while _next_idx < len(_broken_lines) and not _broken_lines[_next_idx].strip():
+            _next_idx += 1
+        
+        # 다음 콘텐츠 줄이 없으면 그대로
+        if _next_idx >= len(_broken_lines):
+            _fixed_lines.append(_broken_lines[_j])
+            _j += 1
+            continue
+        
+        _next_content = _broken_lines[_next_idx].strip()
+        
+        # 다음 줄이 씬번호/비트헤더/EP헤더면 캐릭터명만 있는 거 — 합치지 않음
+        if (_next_content.startswith("S#") or _next_content.startswith("EP") or
+            _next_content.startswith("Beat") or _next_content.startswith("===") or
+            _next_content.startswith("━━") or _next_content.startswith("───")):
+            _fixed_lines.append(_broken_lines[_j])
+            _j += 1
+            continue
+        
+        # 다음 줄도 캐릭터명이면 합치지 않음
+        if _is_likely_char_name(_next_content):
+            _fixed_lines.append(_broken_lines[_j])
+            _j += 1
+            continue
+        
+        # 케이스 C: 다음이 (괄호) 행동 지시 + 그 다음이 실제 대사
+        if (_next_content.startswith("(") and _next_content.endswith(")")
+                and len(_next_content) <= 40):
+            # 그 다음 비어있지 않은 줄 찾기
+            _after_paren = _next_idx + 1
+            while _after_paren < len(_broken_lines) and not _broken_lines[_after_paren].strip():
+                _after_paren += 1
+            if (_after_paren < len(_broken_lines) and
+                _broken_lines[_after_paren].strip() and
+                not _is_likely_char_name(_broken_lines[_after_paren].strip())):
+                _fixed_lines.append(
+                    f"{_cur}\t\t{_next_content} {_broken_lines[_after_paren].strip()}"
+                )
+                _j = _after_paren + 1
+                continue
+        
+        # 일반 케이스: 캐릭터 + 다음 줄 대사 합치기
+        _fixed_lines.append(f"{_cur}\t\t{_next_content}")
+        _j = _next_idx + 1
     lines = _fixed_lines
 
     # ── 본문 변환 루프 ──
@@ -2824,7 +2886,49 @@ if has_any_beats:
         unsafe_allow_html=True,
     )
 
-    timestamp = datetime.now().strftime("%Y%m%d")
+    # ★ v2.0.1 — 파일명 규칙: 각본_제목_v1.0_날짜_시간.확장자
+    # 제목은 Creator Engine 입력의 title 또는 logline 첫 어구에서 추출.
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+
+    # 작품 제목 추출 (안전 가드)
+    def _extract_title():
+        """작품 제목을 안전하게 추출. 우선순위:
+        1. inputs['title'] 명시값
+        2. logline 앞부분 (가제 표기 제거 후 첫 어구)
+        3. fallback: '제목미정'
+        """
+        _inp = st.session_state.get("inputs", {}) or {}
+        # 1. title 명시 입력
+        _title = (_inp.get("title") or "").strip()
+        if _title:
+            return _sanitize_filename(_title)
+        # 2. logline에서 작품명 추출 시도
+        _logline = (_inp.get("logline") or "").strip()
+        if _logline:
+            import re as _re_t
+            # "제목:", "가제:", "「제목」", "<제목>", "[제목]" 패턴
+            for _pat in [
+                r'「([^」]+)」', r'<([^>]+)>', r'\[([^\]]+)\]',
+                r'^(?:제목|가제)\s*[:：]\s*([^\n]+?)(?:\(|$|,|\n)',
+            ]:
+                _m = _re_t.search(_pat, _logline)
+                if _m:
+                    return _sanitize_filename(_m.group(1).strip())
+        # 3. fallback
+        return "제목미정"
+
+    def _sanitize_filename(s: str) -> str:
+        """파일명에 쓸 수 없는 문자 제거 + 공백 정리."""
+        import re as _re_s
+        s = _re_s.sub(r'[\\/:*?"<>|]', '', s)
+        s = _re_s.sub(r'\s+', '_', s.strip())
+        # 너무 길면 자르기
+        if len(s) > 30:
+            s = s[:30]
+        return s or "제목미정"
+
+    _work_title = _extract_title()
+    _version_tag = "v1.0"  # 추후 버전 입력 UI 추가 시 확장
 
     st.markdown('<div class="cl">에피소드별</div>', unsafe_allow_html=True)
     dl_cols = st.columns(min(ne, 4))
@@ -2832,17 +2936,19 @@ if has_any_beats:
         ep_text = get_all_episode_text(ep)
         if ep_text:
             with dl_cols[idx % min(ne, 4)]:
-                build_txt_download(ep_text, f"EP{ep}_{timestamp}.txt")
-                build_docx_download(ep_text, f"EP{ep}_{timestamp}.docx", title=f"EPISODE {ep}")
+                _ep_fname_base = f"각본_{_work_title}_EP{ep}_{_version_tag}_{timestamp}"
+                build_txt_download(ep_text, f"{_ep_fname_base}.txt")
+                build_docx_download(ep_text, f"{_ep_fname_base}.docx", title=f"EPISODE {ep}")
 
     full_text = get_full_season_text()
     if full_text:
         st.markdown('<div class="cl" style="margin-top:1rem">시즌 전체</div>', unsafe_allow_html=True)
         col_f1, col_f2 = st.columns(2)
+        _season_fname_base = f"각본_{_work_title}_{_version_tag}_{timestamp}"
         with col_f1:
-            build_txt_download(full_text, f"SEASON1_FULL_{timestamp}.txt")
+            build_txt_download(full_text, f"{_season_fname_base}.txt")
         with col_f2:
-            build_docx_download(full_text, f"SEASON1_FULL_{timestamp}.docx", title=f"시즌 1 — {ne}부작 · {genre}")
+            build_docx_download(full_text, f"{_season_fname_base}.docx", title=f"시즌 1 — {ne}부작 · {genre}")
 
 
 # ══════════════════════════════════════════════
