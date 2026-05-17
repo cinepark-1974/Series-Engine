@@ -1,5 +1,5 @@
 """
-👖 BLUE JEANS SERIES ENGINE v2.0.1 — main.py
+👖 BLUE JEANS SERIES ENGINE v2.0.3 — main.py
 시즌 아크 → 에피소드 씬 플랜 → 비트 집필 파이프라인
 © 2026 BLUE JEANS PICTURES
 
@@ -13,12 +13,19 @@
 
 ★ v2.0.1 미세 패치
   [패치 E] 캐릭터+대사 분리 복구 강화 — 한국 시나리오 표준 양식 정합
-    · 빈 줄 없는 캐릭터/대사 연속 출력 자동 합치기
-    · V.O./O.S./F 등 변형 캐릭터명 인식
-    · 행동 지시(괄호) 한 줄 처리 — Writer Engine 양식 100% 정합
-  [패치 F] DOCX/TXT 파일명 규칙 갱신
-    · 형식: 각본_제목_v1.0_YYYYMMDD_HHMM.docx
-    · 제목 자동 추출 (inputs.title → logline → fallback)
+  [패치 F] DOCX/TXT 파일명 규칙 갱신 — 각본_제목_v1.0_날짜_시간
+
+★ v2.0.2 미세 패치
+  [패치 G] 씬 헤딩 시간 표기 5단계 표준 강제
+    · 5단계: 새벽 / 오전 / 오후 / 저녁 / 밤
+    · 시·분 단위·세분화·"낮" 단독 금지
+    · 부가표기 괄호로
+
+★ v2.0.3 미세 패치
+  [패치 H] DOCX 출력 모드 토글 — 비트헤더 선택적 포함
+    · 최종 모드 (기본): 비트 헤더(Beat 0~7) 제거 → 제작·연출 전달용
+    · 집필 모드: 비트 헤더 포함 → 작가 검토용
+    · STEP 5에서 라디오 토글로 선택
 """
 
 import streamlit as st
@@ -63,8 +70,8 @@ from prompt import (
 # Series Engine 컨텍스트에서 동작하도록 통합.
 # ═══════════════════════════════════════════════════════════
 
-ENGINE_VERSION = "v2.0.1"
-ENGINE_BUILD_DATE = "2026-05-16"
+ENGINE_VERSION = "v2.0.3"
+ENGINE_BUILD_DATE = "2026-05-17"
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1117,13 +1124,16 @@ def build_txt_download(text: str, filename: str):
     )
 
 
-def build_docx_download(text: str, filename: str, title: str = ""):
+def build_docx_download(text: str, filename: str, title: str = "",
+                        include_beat_headers: bool = False):
     """v1.9 — Writer Engine 양식 빌더 호출 래퍼.
 
     기존 평문 빌더 자리를 한국 시나리오 표준 양식 빌더로 교체.
     text가 시즌 전체(`============================================================
 EPISODE N` 마커 포함)인지 단일 EP 텍스트인지 자동 판단해
     어댑터 함수로 위임. 메타데이터(장르/부수/비트 수)는 session_state에서 자동 추출.
+    
+    ★ v2.0.3 — include_beat_headers 기본 False (최종 모드).
     """
     try:
         # session_state에서 메타데이터 추출 (있으면)
@@ -1137,12 +1147,14 @@ EPISODE N` 마커 포함)인지 단일 EP 텍스트인지 자동 판단해
                 text, title=title, mode="season",
                 genre=_genre, num_episodes=_num_eps,
                 beats_done_count=_beats_count,
+                include_beat_headers=include_beat_headers,
             )
         else:
             data = make_series_docx_bytes(
                 text, title=title, mode="episode",
                 genre=_genre, num_episodes=_num_eps,
                 beats_done_count=_beats_count,
+                include_beat_headers=include_beat_headers,
             )
 
         st.download_button(
@@ -1260,6 +1272,7 @@ def make_series_docx_bytes(
     fact_based: bool = False,
     historical: bool = False,
     historical_type: str = "",
+    include_beat_headers: bool = False,
 ) -> bytes:
     """시리즈 시나리오 DOCX — 한국 표준 시나리오 서식.
 
@@ -1282,6 +1295,10 @@ def make_series_docx_bytes(
         완성 비트 수 (커버 페이지 진행도).
     fact_based / historical / historical_type :
         면책 자막 페이지 자동 삽입 조건.
+    include_beat_headers : bool, default False
+        ★ v2.0.3 — 비트헤더 출력 여부.
+        True  → 집필 모드 (Beat 0~7 헤더 표시, 작가 검토용)
+        False → 최종 모드 (비트 헤더 제거, 제작·연출 전달용) — 기본값
     """
     import re
     from docx import Document as DocxDocument
@@ -1555,7 +1572,13 @@ def make_series_docx_bytes(
         return p
 
     def add_beat_heading(s):
-        """비트 구분 헤더 (예: 'EP1 — Beat 0. Cold Opening')."""
+        """비트 구분 헤더 (예: 'EP1 — Beat 0. Cold Opening').
+        
+        ★ v2.0.3 — include_beat_headers=False (기본)인 경우 출력 안 함.
+        최종 시나리오에는 작업 메타정보가 들어가면 안 됨.
+        """
+        if not include_beat_headers:
+            return None  # 최종 모드 — 비트헤더 출력 안 함
         p = doc.add_paragraph(style='비트헤더')
         r = p.add_run(s)
         r.font.name = "함초롬바탕"
@@ -2930,6 +2953,20 @@ if has_any_beats:
     _work_title = _extract_title()
     _version_tag = "v1.0"  # 추후 버전 입력 UI 추가 시 확장
 
+    # ★ v2.0.3 — DOCX 출력 모드 선택
+    _output_mode = st.radio(
+        "DOCX 출력 모드",
+        options=["최종 모드 (제작·연출 전달용)", "집필 모드 (작가 검토용)"],
+        index=0,
+        horizontal=True,
+        key="docx_output_mode",
+        help=(
+            "최종 모드: 비트 헤더(Beat 0~7) 제거 — 시나리오 표준 양식. 제작·투자·연출 전달용.\n"
+            "집필 모드: 비트 헤더 포함 — 작가가 구조 단위로 검토할 때 사용."
+        ),
+    )
+    _include_beats = "집필 모드" in _output_mode
+
     st.markdown('<div class="cl">에피소드별</div>', unsafe_allow_html=True)
     dl_cols = st.columns(min(ne, 4))
     for idx, ep in enumerate(range(1, ne + 1)):
@@ -2938,7 +2975,10 @@ if has_any_beats:
             with dl_cols[idx % min(ne, 4)]:
                 _ep_fname_base = f"각본_{_work_title}_EP{ep}_{_version_tag}_{timestamp}"
                 build_txt_download(ep_text, f"{_ep_fname_base}.txt")
-                build_docx_download(ep_text, f"{_ep_fname_base}.docx", title=f"EPISODE {ep}")
+                build_docx_download(
+                    ep_text, f"{_ep_fname_base}.docx", title=f"EPISODE {ep}",
+                    include_beat_headers=_include_beats,
+                )
 
     full_text = get_full_season_text()
     if full_text:
@@ -2948,7 +2988,11 @@ if has_any_beats:
         with col_f1:
             build_txt_download(full_text, f"{_season_fname_base}.txt")
         with col_f2:
-            build_docx_download(full_text, f"{_season_fname_base}.docx", title=f"시즌 1 — {ne}부작 · {genre}")
+            build_docx_download(
+                full_text, f"{_season_fname_base}.docx",
+                title=f"시즌 1 — {ne}부작 · {genre}",
+                include_beat_headers=_include_beats,
+            )
 
 
 # ══════════════════════════════════════════════
