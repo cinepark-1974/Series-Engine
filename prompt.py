@@ -97,7 +97,7 @@ def build_locked_block(locked_items: list = None, open_items: list = None) -> st
 # v2.0 ENGINE VERSION
 # ═══════════════════════════════════════════════════════════
 
-ENGINE_VERSION = "v2.0.3"
+ENGINE_VERSION = "v2.0.4"
 ENGINE_BUILD_DATE = "2026-05-17"
 
 
@@ -2066,11 +2066,37 @@ def get_opening_mastery(genre: str) -> str:
 def build_season_arc_prompt(
     inputs: dict, num_episodes: int, duration: int, genre: str,
     locked_block: str = "",
+    monitoring_feedback: str = "",
+    showrunner_notes: str = "",
 ) -> str:
     gr = _genre_text(genre)
     season_beats = _format_season_beats(num_episodes)
     cliffhangers = _format_cliffhangers()
     target = EP_SCENE_TARGETS.get(duration, EP_SCENE_TARGETS[50])
+
+    # ★ v2.0.4 — 외부 모니터링 피드백 + 쇼러너 노트 주입
+    feedback_block = ""
+    if monitoring_feedback and monitoring_feedback.strip():
+        feedback_block = f"""
+
+══ 외부 모니터링 피드백 (반드시 반영) ══
+{monitoring_feedback.strip()}
+
+→ 위 피드백은 외부 검토자의 의견이다. 시즌 아크 설계 시 반드시 반영하라.
+→ 특히 이야기 구조와 캐릭터 영역의 지적은 시즌 비트와 캐릭터 호 설계에 직접 반영한다.
+→ 검토자가 지적한 약점은 시즌 아크 안에서 해결책이 보여야 한다.
+"""
+
+    notes_block = ""
+    if showrunner_notes and showrunner_notes.strip():
+        notes_block = f"""
+
+══ 쇼러너 / 작가 노트 (최우선 반영) ══
+{showrunner_notes.strip()}
+
+→ 위는 작가가 직접 남긴 노트다. 외부 피드백보다 우선한다.
+→ 이 노트의 모든 항목을 시즌 아크에 반영하라.
+"""
 
     return f"""아래 기획 자료를 바탕으로 {num_episodes}부작 시리즈(에피소드당 {duration}분, {target['scenes']})의 **시즌 아크**를 설계하라.
 
@@ -2082,7 +2108,7 @@ def build_season_arc_prompt(
 
 ══ 장르 ══
 {gr}
-
+{feedback_block}{notes_block}
 ══ 시즌 비트 구조 ({num_episodes}부작) ══
 {season_beats}
 

@@ -1,5 +1,5 @@
 """
-👖 BLUE JEANS SERIES ENGINE v2.0.3 — main.py
+👖 BLUE JEANS SERIES ENGINE v2.0.4 — main.py
 시즌 아크 → 에피소드 씬 플랜 → 비트 집필 파이프라인
 © 2026 BLUE JEANS PICTURES
 
@@ -19,13 +19,18 @@
   [패치 G] 씬 헤딩 시간 표기 5단계 표준 강제
     · 5단계: 새벽 / 오전 / 오후 / 저녁 / 밤
     · 시·분 단위·세분화·"낮" 단독 금지
-    · 부가표기 괄호로
 
 ★ v2.0.3 미세 패치
   [패치 H] DOCX 출력 모드 토글 — 비트헤더 선택적 포함
-    · 최종 모드 (기본): 비트 헤더(Beat 0~7) 제거 → 제작·연출 전달용
-    · 집필 모드: 비트 헤더 포함 → 작가 검토용
-    · STEP 5에서 라디오 토글로 선택
+    · 최종 모드 (기본): 비트 헤더 제거
+    · 집필 모드: 비트 헤더 포함
+
+★ v2.0.4 미세 패치
+  [패치 I] 외부 모니터링 / 쇼러너 노트 입력
+    · STEP 2 시즌 아크 영역에 expander 추가
+    · build_season_arc_prompt에 monitoring_feedback / showrunner_notes 인자 전달
+    · 시즌 아크 설계 시 외부 피드백을 본문에 자동 주입
+    · 백업 JSON 스키마 확장 (2개 키 추가)
 """
 
 import streamlit as st
@@ -70,7 +75,7 @@ from prompt import (
 # Series Engine 컨텍스트에서 동작하도록 통합.
 # ═══════════════════════════════════════════════════════════
 
-ENGINE_VERSION = "v2.0.3"
+ENGINE_VERSION = "v2.0.4"
 ENGINE_BUILD_DATE = "2026-05-17"
 
 
@@ -996,6 +1001,8 @@ DEFAULTS = {
     "open_items": [],
     "producer_notes_write": "",
     "season_expression_db": {},  # v2.0
+    "monitoring_feedback": "",  # v2.0.4 — 외부 모니터링 의견
+    "showrunner_notes": "",     # v2.0.4 — 쇼러너 / 작가 노트
 }
 
 for k, v in DEFAULTS.items():
@@ -2511,11 +2518,53 @@ else:
         prompt = build_season_arc_prompt(
             st.session_state["inputs"], ne, dur, genre,
             locked_block=_get_locked_block(),
+            monitoring_feedback=st.session_state.get("monitoring_feedback", ""),
+            showrunner_notes=st.session_state.get("showrunner_notes", ""),
         )
         with st.spinner("시즌 아크를 설계하고 있습니다..."):
             result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_ARC, model=MODEL_PLAN)
         st.session_state["season_arc"] = result
         st.rerun()
+
+    # ★ v2.0.4 — 외부 피드백 + 쇼러너 노트 입력 (시즌 아크 미완성 상태에서만 노출)
+    with st.expander("🗒️ 외부 모니터링 의견 / 쇼러너 노트 (선택, 시즌 아크 설계에 반영)", expanded=False):
+        st.caption(
+            "외부 검토자 모니터링 의견 또는 작가 메모를 입력하시면 시즌 아크 설계 시 자동으로 반영됩니다. "
+            "비워두면 기존 자료만으로 설계합니다."
+        )
+
+        # 기존값 → setdefault로 안전하게 widget 초기화
+        st.session_state.setdefault("monitoring_feedback", "")
+        st.session_state.setdefault("showrunner_notes", "")
+
+        st.text_area(
+            "외부 모니터링 의견",
+            height=200,
+            placeholder=(
+                "예시:\n"
+                "검토자 총평: ...\n"
+                "컨셉/주제: ...\n"
+                "이야기 구조: ...\n"
+                "캐릭터: ...\n"
+                "대사·톤: ...\n"
+                "기타: ..."
+            ),
+            key="monitoring_feedback",
+            help="외부 검토자가 보낸 모니터링 의견을 그대로 붙여넣으세요. 6항목 형태로 구조화되어 있으면 더 정확합니다.",
+        )
+
+        st.text_area(
+            "쇼러너 / 작가 노트 (최우선 반영)",
+            height=150,
+            placeholder=(
+                "예시:\n"
+                "- 검토자 의견 중 '진영 간 갈등 명확화'는 반영하되 '주인공 사진기억능력'은 수용하지 않음.\n"
+                "- 정섬-덕문 과거사를 EP3 후반에 명시적으로 회수할 것.\n"
+                "- 시즌 2 시드 30%만 남기고 시즌 1은 자체 완결성 강화."
+            ),
+            key="showrunner_notes",
+            help="외부 의견 중 수용/거부 결정, 시즌 아크 설계 시 반드시 반영할 사항 등을 자유 형식으로 작성.",
+        )
 
 
 # ══════════════════════════════════════════════
@@ -3010,6 +3059,8 @@ _BACKUP_KEYS = [
     "locked_items", "open_items",
     "producer_notes_write",
     "season_expression_db",  # v2.0
+    "monitoring_feedback",   # v2.0.4
+    "showrunner_notes",      # v2.0.4
 ]
 
 
