@@ -46,7 +46,14 @@ LOCKED_SYSTEM_RULES = """
 """
 
 def build_locked_block(locked_items: list = None, open_items: list = None) -> str:
-    """LOCKED/OPEN 블록을 생성한다."""
+    """LOCKED/OPEN 블록을 생성한다.
+
+    Args:
+        locked_items: 잠긴 항목 리스트 (작가가 변경 불가로 표시).
+        open_items: 열린 항목 리스트 (AI에게 결정 위임 표시).
+    Returns:
+        프롬프트에 주입할 텍스트 블록.
+    """
     result = ""
     if locked_items:
         result += "<LOCKED>\n"
@@ -58,38 +65,6 @@ def build_locked_block(locked_items: list = None, open_items: list = None) -> st
         for item in open_items:
             result += f"- {item}\n"
         result += "</OPEN>\n\n"
-    # v1.8: LOCKED 5종 확장 (Creator v2.5.2 동기화)
-    # Idea Engine 시드 → Creator Engine JSON에 포함되어 넘어온다
-    locked_ext = {}
-    idea_seed = p.get("idea_seed", {}) or {}
-    locked_src = p.get("locked", {}) or core.get("locked", {}) or idea_seed
-    
-    locked_ext["locked_core_decisions"] = locked_src.get("locked_core_decisions", "")
-    locked_ext["locked_music_rules"] = locked_src.get("locked_music_rules", "")
-    locked_ext["locked_visual_motifs"] = locked_src.get("locked_visual_motifs", "")
-    locked_ext["locked_ending_form"] = locked_src.get("locked_ending_form", "")
-    locked_ext["locked_creator_questions"] = locked_src.get("locked_creator_questions", "")
-    
-    # 5종 중 값이 있는 것만 locked_items 텍스트로 조합
-    locked_lines = []
-    label_map = {
-        "locked_core_decisions": "핵심 결정",
-        "locked_music_rules": "음악 규약",
-        "locked_visual_motifs": "시각 모티프",
-        "locked_ending_form": "결말 형식",
-        "locked_creator_questions": "작가 결정 사항",
-    }
-    for k, label in label_map.items():
-        val = locked_ext[k]
-        if val:
-            if isinstance(val, list):
-                val = " / ".join(str(v) for v in val)
-            elif isinstance(val, dict):
-                val = " / ".join(f"{kk}: {vv}" for kk, vv in val.items() if vv)
-            locked_lines.append(f"[{label}] {val}")
-    
-    result["locked_5_extended"] = "\n".join(locked_lines)
-
     return result
 
 

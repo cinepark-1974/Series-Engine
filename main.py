@@ -31,6 +31,11 @@
     · build_season_arc_prompt에 monitoring_feedback / showrunner_notes 인자 전달
     · 시즌 아크 설계 시 외부 피드백을 본문에 자동 주입
     · 백업 JSON 스키마 확장 (2개 키 추가)
+  [Hotfix 1] build_locked_block NameError 수정 (2026-05-17)
+    · prompt.py L61~91에 잘못 박혀 있던 죽은 코드 제거
+    · `p`, `core` 변수 미정의 NameError 해소
+    · LOCKED 5종 확장 처리는 extract_from_creator_json_series에 정상 존재 (중복 코드였음)
+    · 호출부 두 곳(_get_locked_block / rewrite 모드) 모두 정상 동작
 """
 
 import streamlit as st
