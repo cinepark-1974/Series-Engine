@@ -80,8 +80,8 @@ from prompt import (
 # Series Engine 컨텍스트에서 동작하도록 통합.
 # ═══════════════════════════════════════════════════════════
 
-ENGINE_VERSION = "v2.0.4"
-ENGINE_BUILD_DATE = "2026-05-17"
+ENGINE_VERSION = "v2.0.5"
+ENGINE_BUILD_DATE = "2026-05-20"
 
 
 # ═══════════════════════════════════════════════════════════
@@ -986,6 +986,7 @@ def stream_response(system: str, user_prompt: str, max_tokens: int, model: str =
 # ──────────────────────────────────────────────
 DEFAULTS = {
     "inputs": {
+        "title": "",  # ★ v2.0.5 — 작품 제목 (백업 파일명·사이드바·PDF 푸터)
         "logline": "", "intention": "", "gns": "",
         "characters": "", "world": "", "structure": "",
         "scenes": "", "treatment": "", "tone": "",
@@ -2142,6 +2143,241 @@ if mode == "🔄 리라이트":
         "집필 모드와 독립적으로 작동합니다."
     )
 
+    # ══════════════════════════════════════════════
+    # ★ v2.0.5 — 리라이트 자동 로더 (Creator JSON + Series JSON)
+    # ══════════════════════════════════════════════
+    def _rw_build_subsequent_summary(beats_dict, from_ep):
+        """후속 EP 비트들을 헤더 + 첫 300자 스니펫으로 압축. 토큰 폭주 방지."""
+        if not beats_dict:
+            return ""
+        parts = []
+        try:
+            sorted_keys = sorted(beats_dict.keys(), key=lambda k: tuple(int(x) for x in k.split("_")))
+        except (ValueError, IndexError):
+            sorted_keys = list(beats_dict.keys())
+        for k in sorted_keys:
+            try:
+                ep_part, bt_part = k.split("_")
+                ep_int = int(ep_part)
+                if ep_int <= from_ep:
+                    continue
+                v = beats_dict.get(k, "")
+                if not v:
+                    continue
+                beat_name = ""
+                if int(bt_part) < len(EPISODE_BEATS):
+                    beat_name = EPISODE_BEATS[int(bt_part)].get("name", "")
+                snippet = v.strip()[:300].replace("\n", " ")
+                parts.append(f"[EP{ep_int} Beat{bt_part} — {beat_name}] {snippet}...")
+            except (ValueError, IndexError):
+                continue
+        return "\n\n".join(parts)
+
+    def _rw_sync_beat_from_loaded():
+        """EP/Beat 셀렉터 변경 시 호출. 로드된 Series JSON에서 해당 비트 텍스트를 꺼내 pending에 적재."""
+        loaded_beats = st.session_state.get("_rw_loaded_beats")
+        if not loaded_beats:
+            return
+        ep = st.session_state.get("rw_ep_num", 1)
+        bt = st.session_state.get("rw_beat_num", 0)
+        key_str = f"{ep}_{bt}"
+        beat_text = loaded_beats.get(key_str, "")
+        subsequent_text = _rw_build_subsequent_summary(loaded_beats, ep)
+        loaded_plans = st.session_state.get("_rw_loaded_plans", {})
+        plan_text = loaded_plans.get(str(ep), "")
+
+        pending = st.session_state.get("_pending_widget_sync", {}) or {}
+        pending["rw_beat_text"] = beat_text
+        pending["rw_ep_plan"] = plan_text
+        pending["rw_subsequent"] = subsequent_text
+        st.session_state["_pending_widget_sync"] = pending
+
+    with st.expander("⚡ JSON 자동 로드 (Creator Engine / Series Engine)", expanded=False):
+        st.markdown(
+            '<div class="small-meta">'
+            '<b>Creator Engine JSON</b>: 기획서 5칸(로그라인·GNS·캐릭터·세계관·톤) + LOCKED 자동 채움.<br>'
+            '<b>Series Engine JSON</b>: 시즌 아크 · 씬 플랜 · 비트 본문 · 후속 EP를 EP/Beat 선택에 따라 자동 갱신.<br>'
+            '외부 대본 리라이트는 이 단계 건너뛰고 아래 칸을 직접 채우세요.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        col_rwj1, col_rwj2 = st.columns(2)
+
+        # ── Creator Engine JSON ──
+        with col_rwj1:
+            st.markdown("**📋 Creator Engine JSON**")
+            rw_creator_file = st.file_uploader(
+                "Creator Engine JSON 파일",
+                type=["json"],
+                key="rw_creator_uploader",
+                label_visibility="collapsed",
+            )
+            rw_load_creator_btn = st.button(
+                "📂 Creator JSON 적용",
+                use_container_width=True,
+                disabled=(rw_creator_file is None),
+                key="rw_load_creator_btn",
+            )
+            if rw_creator_file is not None:
+                st.caption(f"선택됨: `{rw_creator_file.name}`")
+
+            if rw_load_creator_btn and rw_creator_file is not None:
+                try:
+                    raw = rw_creator_file.read().decode("utf-8")
+                    creator_data = json.loads(raw)
+                    loaded = extract_from_creator_json_series(creator_data)
+
+                    pending = st.session_state.get("_pending_widget_sync", {}) or {}
+
+                    if loaded.get("logline"):
+                        pending["rw_logline"] = loaded["logline"]
+                    if loaded.get("gns"):
+                        pending["rw_gns"] = loaded["gns"]
+                    if loaded.get("characters"):
+                        pending["rw_characters"] = loaded["characters"]
+                    if loaded.get("world"):
+                        pending["rw_world"] = loaded["world"]
+                    if loaded.get("tone"):
+                        pending["rw_tone"] = loaded["tone"]
+
+                    # 작품 제목도 inputs.title에 주입 (사이드바·파일명용)
+                    loaded_title = (loaded.get("title") or "").strip()
+                    if loaded_title:
+                        st.session_state["inputs"]["title"] = loaded_title
+                        pending["input_title"] = loaded_title
+
+                    locked_ext = loaded.get("locked_5_extended", "")
+                    if locked_ext:
+                        pending["rw_locked"] = locked_ext
+
+                    if pending:
+                        st.session_state["_pending_widget_sync"] = pending
+
+                    meta = creator_data.get("_meta", {})
+                    ce_ver = meta.get("engine_version", "?")
+                    title = loaded.get("title", "(무제)")
+                    filled = sum(1 for f in ["logline", "gns", "characters", "world", "tone"] if loaded.get(f))
+
+                    st.success(
+                        f"✅ Creator Engine {ce_ver} 로드 완료.\n\n"
+                        f"**프로젝트**: {title}\n\n"
+                        f"**기획서 필드**: {filled}개 / 5칸 채움"
+                    )
+                    st.rerun()
+                except json.JSONDecodeError as e:
+                    st.error(f"JSON 파싱 실패: {e}")
+                except Exception as e:
+                    st.error(f"로드 중 오류: {e}")
+
+        # ── Series Engine JSON ──
+        with col_rwj2:
+            st.markdown("**📺 Series Engine JSON**")
+            rw_series_file = st.file_uploader(
+                "Series Engine 백업 JSON",
+                type=["json"],
+                key="rw_series_uploader",
+                label_visibility="collapsed",
+            )
+            rw_load_series_btn = st.button(
+                "📂 Series JSON 적용",
+                use_container_width=True,
+                disabled=(rw_series_file is None),
+                key="rw_load_series_btn",
+            )
+            if rw_series_file is not None:
+                st.caption(f"선택됨: `{rw_series_file.name}`")
+
+            if rw_load_series_btn and rw_series_file is not None:
+                try:
+                    raw = rw_series_file.read().decode("utf-8")
+                    series_data = json.loads(raw)
+                    sess = series_data.get("session", {})
+                    meta = series_data.get("_meta", {})
+
+                    if not sess:
+                        st.error("session 키가 없습니다. Series Engine 백업이 맞는지 확인하세요.")
+                    else:
+                        pending = st.session_state.get("_pending_widget_sync", {}) or {}
+
+                        loaded_genre = sess.get("genre", "")
+                        if loaded_genre and loaded_genre in GENRE_RULES:
+                            pending["rw_genre"] = loaded_genre
+
+                        # 작품 제목 복원 (inputs.title 또는 _meta.project_title)
+                        sess_inputs = sess.get("inputs", {}) or {}
+                        loaded_title = (sess_inputs.get("title") or "").strip() or (meta.get("project_title") or "").strip()
+                        if loaded_title:
+                            st.session_state["inputs"]["title"] = loaded_title
+                            pending["input_title"] = loaded_title
+
+                        exp_chars = sess.get("expanded_characters", "")
+                        if exp_chars:
+                            pending["rw_characters"] = exp_chars
+
+                        season_arc = sess.get("season_arc", "")
+                        if season_arc:
+                            pending["rw_season_arc"] = season_arc
+
+                        locked_list = sess.get("locked_items", []) or []
+                        open_list = sess.get("open_items", []) or []
+                        if locked_list:
+                            pending["rw_locked"] = "\n".join(locked_list)
+                        if open_list:
+                            pending["rw_open"] = "\n".join(open_list)
+
+                        prod_notes = sess.get("producer_notes_write", "")
+                        if prod_notes:
+                            pending["rw_producer"] = prod_notes
+
+                        beats_dict = sess.get("episode_beats", {}) or {}
+                        plans_dict = sess.get("episode_plans", {}) or {}
+                        st.session_state["_rw_loaded_beats"] = beats_dict
+                        st.session_state["_rw_loaded_plans"] = plans_dict
+
+                        cur_ep = st.session_state.get("rw_ep_num", 1)
+                        cur_bt = st.session_state.get("rw_beat_num", 0)
+                        key_str = f"{cur_ep}_{cur_bt}"
+                        if key_str in beats_dict:
+                            pending["rw_beat_text"] = beats_dict[key_str]
+                        if str(cur_ep) in plans_dict:
+                            pending["rw_ep_plan"] = plans_dict[str(cur_ep)]
+
+                        subseq_text = _rw_build_subsequent_summary(beats_dict, cur_ep)
+                        if subseq_text:
+                            pending["rw_subsequent"] = subseq_text
+
+                        if pending:
+                            st.session_state["_pending_widget_sync"] = pending
+
+                        se_ver = meta.get("engine_version", "?")
+                        saved_at = meta.get("saved_at", "?")
+                        eps_planned = meta.get("episodes_planned", 0)
+                        beats_written = meta.get("beats_written", 0)
+                        title_display = loaded_title or "(제목 없음)"
+
+                        st.success(
+                            f"✅ Series Engine {se_ver} 백업 로드 완료.\n\n"
+                            f"**작품**: {title_display}\n\n"
+                            f"**저장 시각**: {saved_at}\n\n"
+                            f"**장르**: {loaded_genre} / **씬 플랜**: {eps_planned}개 EP / **집필 비트**: {beats_written}개\n\n"
+                            f"EP/Beat 셀렉터를 바꾸면 해당 비트 본문이 자동으로 따라옵니다."
+                        )
+                        st.rerun()
+                except json.JSONDecodeError as e:
+                    st.error(f"JSON 파싱 실패: {e}")
+                except Exception as e:
+                    st.error(f"로드 중 오류: {e}")
+
+        if st.session_state.get("_rw_loaded_beats"):
+            n_beats = len(st.session_state["_rw_loaded_beats"])
+            n_plans = len(st.session_state.get("_rw_loaded_plans", {}))
+            st.info(f"📺 Series JSON 로드됨: 비트 {n_beats}개, 씬 플랜 {n_plans}개 메모리 보관 중")
+            if st.button("🗑️ Series JSON 로드 데이터 비우기", key="rw_clear_loaded"):
+                st.session_state.pop("_rw_loaded_beats", None)
+                st.session_state.pop("_rw_loaded_plans", None)
+                st.rerun()
+
     # ── ① 기획서 (Creator Engine 산출물) ──
     st.markdown(
         '<div class="section-header">📋 기획서 <span class="en">CREATOR ENGINE OUTPUT</span></div>',
@@ -2171,13 +2407,18 @@ if mode == "🔄 리라이트":
     col_ep, col_bt = st.columns(2)
     with col_ep:
         st.session_state.setdefault("rw_ep_num", 1)
-        rw_ep_num = st.number_input("에피소드 번호", min_value=1, max_value=12, key="rw_ep_num")
+        rw_ep_num = st.number_input(
+            "에피소드 번호", min_value=1, max_value=12,
+            key="rw_ep_num",
+            on_change=_rw_sync_beat_from_loaded,  # ★ v2.0.5
+        )
     with col_bt:
         rw_beat_num = st.selectbox(
             "비트 번호",
             list(range(8)),
             format_func=lambda x: f"Beat {x} — {EPISODE_BEATS[x]['name']}" if x < len(EPISODE_BEATS) else f"Beat {x}",
             key="rw_beat_num",
+            on_change=_rw_sync_beat_from_loaded,  # ★ v2.0.5
         )
 
     rw_beat_text = st.text_area(
@@ -2432,6 +2673,12 @@ with st.expander("⚡ Creator Engine JSON 업로드 (자동 채우기)", expande
                     st.session_state["inputs"][key] = loaded[key]
                     pending[f"input_{key}"] = loaded[key]
 
+            # ★ v2.0.5: 작품 제목 자동 주입 (Creator JSON의 project.title)
+            loaded_title = (loaded.get("title", "") or "").strip()
+            if loaded_title:
+                st.session_state["inputs"]["title"] = loaded_title
+                pending["input_title"] = loaded_title
+
             # v1.8: LOCKED 5종 확장 — Creator JSON에서 추출된 LOCKED 항목 자동 추가
             locked_ext = loaded.get("locked_5_extended", "")
             if locked_ext:
@@ -2471,6 +2718,17 @@ with st.expander("⚡ Creator Engine JSON 업로드 (자동 채우기)", expande
             st.error(f"로드 중 오류: {e}")
 
 with st.expander("📝 Creator Engine 결과 붙여넣기 (9칸)", expanded=not st.session_state["season_arc"]):
+    # ★ v2.0.5 — 작품 제목 (백업 파일명·사이드바·PDF 푸터에 사용)
+    _title_widget_key = "input_title"
+    st.session_state.setdefault(_title_widget_key, st.session_state["inputs"].get("title", ""))
+    st.text_input(
+        "🎬 작품 제목",
+        placeholder="예: 클레어의 서울 / 수비니어샵 / 왕게임 시즌 2",
+        key=_title_widget_key,
+        help="백업 JSON 파일명, 사이드바, PDF 푸터에 표시됩니다. 비워두면 장르 기반 파일명으로 폴백.",
+    )
+    st.session_state["inputs"]["title"] = st.session_state[_title_widget_key]
+
     for key, label, placeholder in INPUT_FIELDS:
         height = 200 if key == "characters" else 120
         # ★ v1.8 패치: value= 제거 → setdefault로 초기값 주입 (안티패턴 회피)
@@ -3071,11 +3329,13 @@ _BACKUP_KEYS = [
 
 def _export_session_backup() -> bytes:
     """현재 세션 상태를 JSON bytes로 직렬화."""
+    _inputs_snap = st.session_state.get("inputs", {}) or {}
     payload = {
         "_meta": {
             "engine": "Series Engine",
             "engine_version": ENGINE_VERSION,
             "saved_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "project_title": (_inputs_snap.get("title") or "").strip(),  # ★ v2.0.5
             "genre": st.session_state.get("genre", ""),
             "num_episodes": st.session_state.get("num_episodes", 8),
             "season_arc_done": bool(st.session_state.get("season_arc")),
@@ -3129,12 +3389,30 @@ def _import_session_backup(raw_bytes: bytes) -> dict:
     return meta
 
 
+def _sanitize_for_filename(text: str, max_len: int = 30) -> str:
+    """★ v2.0.5 — 백업 파일명용 sanitize (모듈 스코프).
+    OS 호환: 위험 문자 제거, 공백→언더스코어, 길이 제한.
+    """
+    if not text:
+        return ""
+    for bad in ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '\n', '\r', '\t']:
+        text = text.replace(bad, "")
+    text = "_".join(text.split())
+    text = text.strip("._")
+    return text[:max_len]
+
+
 def _make_backup_filename() -> str:
-    genre = st.session_state.get("genre", "")
+    # ★ v2.0.5 — 작품 제목 우선 패턴
+    inputs = st.session_state.get("inputs", {}) or {}
+    title = _sanitize_for_filename((inputs.get("title") or "").strip())
+    genre = _sanitize_for_filename(st.session_state.get("genre", ""), max_len=20)
     ne = st.session_state.get("num_episodes", 8)
     eps = len(st.session_state.get("episode_plans", {}))
     beats = len(st.session_state.get("episode_beats", {}))
     ts = datetime.now().strftime("%Y%m%d_%H%M")
+    if title:
+        return f"SeriesEngine_{title}_{genre}_{ne}ep_{eps}plans_{beats}beats_{ts}.json"
     return f"SeriesEngine_{genre}_{ne}ep_{eps}plans_{beats}beats_{ts}.json"
 
 
@@ -3185,9 +3463,11 @@ with st.expander("💾 프로젝트 세션 백업 (중단 시 복구용)", expan
                 saved_at = meta.get("saved_at", "?")
                 eps_planned = meta.get("episodes_planned", "?")
                 beats_written = meta.get("beats_written", "?")
+                proj_title = (meta.get("project_title") or "").strip() or "(제목 없음)"  # ★ v2.0.5
 
                 st.success(
                     f"✅ 백업 복원 완료\n\n"
+                    f"**작품**: {proj_title}\n\n"
                     f"**저장 시각**: {saved_at}\n\n"
                     f"**엔진 버전**: {saved_ver}\n\n"
                     f"**씬 플랜**: {eps_planned}개 EP\n\n"
