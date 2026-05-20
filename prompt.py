@@ -1,7 +1,10 @@
 # ─────────────────────────────────────────────────────────────
-# BLUE JEANS SERIES ENGINE v1.8
+# BLUE JEANS SERIES ENGINE v2.0.6
 # prompt.py — Full Version (Creator Engine v1.9 + Writer Engine v2.2 동기화)
 # © 2026 BLUE JEANS PICTURES
+#
+# NOTE: 엔진 버전 상수(ENGINE_VERSION / ENGINE_BUILD_DATE)는 main.py에서 단일 관리한다.
+#       prompt.py 안에서 버전 문자열을 따로 두지 않는다 (이중 관리 방지).
 # ─────────────────────────────────────────────────────────────
 
 
@@ -66,14 +69,6 @@ def build_locked_block(locked_items: list = None, open_items: list = None) -> st
             result += f"- {item}\n"
         result += "</OPEN>\n\n"
     return result
-
-
-# ═══════════════════════════════════════════════════════════
-# v2.0 ENGINE VERSION
-# ═══════════════════════════════════════════════════════════
-
-ENGINE_VERSION = "v2.0.4"
-ENGINE_BUILD_DATE = "2026-05-17"
 
 
 # ═══════════════════════════════════════════════════════════

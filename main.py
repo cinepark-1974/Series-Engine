@@ -1,5 +1,5 @@
 """
-👖 BLUE JEANS SERIES ENGINE v2.0.4 — main.py
+👖 BLUE JEANS SERIES ENGINE v2.0.6 — main.py
 시즌 아크 → 에피소드 씬 플랜 → 비트 집필 파이프라인
 © 2026 BLUE JEANS PICTURES
 
@@ -36,6 +36,21 @@
     · `p`, `core` 변수 미정의 NameError 해소
     · LOCKED 5종 확장 처리는 extract_from_creator_json_series에 정상 존재 (중복 코드였음)
     · 호출부 두 곳(_get_locked_block / rewrite 모드) 모두 정상 동작
+
+★ v2.0.5 미세 패치
+  [패치 J] 작품 제목 입력 + 백업 파일명/사이드바/PDF 푸터 자동 주입
+  [패치 K] 리라이트 모드 자동 로더 (Creator JSON + Series JSON)
+
+★ v2.0.6 미세 패치 (2026-05-20)
+  [Hotfix 2] 백업 복원 시 monitoring_feedback / showrunner_notes
+            "cannot be modified after the widget with key ... is instantiated"
+            오류 해소
+    · 원인: v2.0.4에서 추가된 두 신규 위젯이 _pending_widget_sync 우회 경로에
+            등록되지 않은 채 _import_session_backup에서 직접 대입되고 있었음.
+            STEP 2 영역에서 이미 instantiate된 text_area라 직접 수정 불가.
+    · 수정: _BACKUP_KEYS 순회 중 위젯 key 두 개만 건너뛰고,
+            pending dict에 등록 → 페이지 최상단 _pending_sync 처리에서 안전 적용.
+    · 효과: 첫 클릭에 바로 복원 성공 (재클릭 불필요), 빨간 오류 박스 사라짐.
 """
 
 import streamlit as st
@@ -80,7 +95,7 @@ from prompt import (
 # Series Engine 컨텍스트에서 동작하도록 통합.
 # ═══════════════════════════════════════════════════════════
 
-ENGINE_VERSION = "v2.0.5"
+ENGINE_VERSION = "v2.0.6"
 ENGINE_BUILD_DATE = "2026-05-20"
 
 
@@ -3358,12 +3373,20 @@ def _import_session_backup(raw_bytes: bytes) -> dict:
     session_data = data.get("session", {})
     meta = data.get("_meta", {})
 
+    # ★ v2.0.6 패치: 위젯 key로 사용되는 신규 백업 키는 직접 대입 금지.
+    # STEP 2 영역에서 이미 instantiate된 text_area들이라
+    # 직접 st.session_state[k] = v 하면 StreamlitAPIException 발생.
+    _WIDGET_KEYS_IN_BACKUP = {"monitoring_feedback", "showrunner_notes"}
+
     for k in _BACKUP_KEYS:
         if k in session_data:
             v = session_data[k]
             # 딕셔너리 키를 int로 복원 (에피소드 번호)
             if k in ["episode_plans", "ep_characters"] and isinstance(v, dict):
                 v = {int(kk): vv for kk, vv in v.items()}
+            # 위젯 key 항목은 pending으로 우회 (아래에서 처리)
+            if k in _WIDGET_KEYS_IN_BACKUP:
+                continue
             st.session_state[k] = v
 
     # ★ v1.8 패치: 위젯 key는 이미 그려진 상태라 직접 수정 불가.
@@ -3382,6 +3405,11 @@ def _import_session_backup(raw_bytes: bytes) -> dict:
     open_restored = session_data.get("open_items", [])
     if isinstance(open_restored, list) and open_restored:
         pending["open_input"] = "\n".join(open_restored)
+
+    # ★ v2.0.6 — v2.0.4 신규 위젯도 pending으로 우회 (text_area는 빈 문자열도 안전)
+    for _wk in _WIDGET_KEYS_IN_BACKUP:
+        if _wk in session_data:
+            pending[_wk] = session_data[_wk] or ""
 
     if pending:
         st.session_state["_pending_widget_sync"] = pending
