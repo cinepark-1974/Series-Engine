@@ -1,4 +1,4 @@
-# 👖 BLUE JEANS SERIES ENGINE v2.0
+# 👖 BLUE JEANS SERIES ENGINE v2.0.8
 
 **Netflix 미니시리즈/시리즈(시즌 1) 시나리오 집필 엔진**
 
@@ -17,8 +17,8 @@
 
 ```
 series-engine/
-├── main.py              (3,013줄) — Streamlit 메인 앱 + DOCX 양식 빌더
-├── prompt.py            (3,386줄) — 시리즈 작법 원칙 + 빌더 함수 + v2.0 모듈
+├── main.py              (3,583줄) — Streamlit 메인 앱 + DOCX 양식 빌더
+├── prompt.py            (3,480줄) — 시리즈 작법 원칙 + 빌더 함수 + v2.0 모듈
 ├── profession_pack.py   (2,586줄) — 직업 디테일 자동 주입
 ├── period_pack.py       (1,605줄) — 시대 디테일 자동 주입
 ├── requirements.txt     — streamlit, anthropic, python-docx
@@ -69,14 +69,19 @@ STEP 3: 에피소드별 씬 플랜 (Sonnet) ← 에피소드당 1회 클릭
 STEP 4: 비트별 집필 (Opus) ← 에피소드당 8비트 = 8회 클릭
   → SCOPE MANDATE + 5단계 서술 구조 + 빌런 추적 + LOCKED 검증
   → Genre Drive 5점 + AI Escape A1~A17 + 비트 구조 변주
-  → ★ v2.0 — 직전 비트 마지막 씬 번호 자동 추출 → S#(N+1)부터 강제
+  → ★ v2.0 — 같은 EP 안에서 직전 비트 마지막 씬 번호 자동 추출 → S#(N+1)부터 강제
+  → ★ v2.0.8 — 새 EP의 첫 비트(Beat 0)는 S#1부터 리셋 (시즌 통산 채번 차단)
   → ★ v2.0 — INSERT 시스템 + PROP 연속성 + GENRE BOOSTER + HELPER 룰 자동 주입
   → ★ v2.0 — 회별 마스터리 모듈 자동 분기 (EP1·EP4·EP6·EP8)
   → ★ v2.0 — 시즌 표현 누적 DB 자동 추출·차단 (AI Escape A17 해결)
      ↓
 STEP 5: 다운로드
   → ★ v2.0 — 한국 시나리오 표준 양식 DOCX (Writer Engine 양식 정합)
-  → 시즌 표지 + EP 분리 페이지 + 비트 헤더 + 씬번호/대사/지문/INSERT 자동 양식화
+  → ★ v2.0.3 — 출력 모드 토글
+       · 집필 모드: 비트 헤더 포함 + 표지 페이지 (작가 검토용)
+       · 최종 모드: 비트 헤더 제거 + 표지 없음 (제작·연출·투자 전달용)
+  → ★ v2.0.7 — 최종 모드는 시나리오 본문 1페이지 S#1부터 바로 시작 (엔진 메타 노출 차단)
+  → 시즌 표지 + EP 분리 페이지 + 씬번호/대사/지문/INSERT 자동 양식화
   → 에피소드별 TXT/DOCX + 시즌 전체 TXT/DOCX
 ```
 
@@ -149,8 +154,16 @@ Creator Engine / Writer Engine과 완전 통일:
 | v1.7 | 18개 기능 업그레이드 — P&P 시리즈맵, AI Escape, Genre Drive, 비트변주, 9장르×12필드, Villain 4Q |
 | v1.8 | Profession/Period Pack, 적응형 컨텍스트, 비트 간 중복 방지, Streamlit 안티패턴 안정화 |
 | v1.9 | 한국 시나리오 표준 양식 DOCX 빌더 이식 (Writer Engine 양식 정합) |
-| **v2.0** | **완전한 엔진 — 회별 마스터리 4종, GENRE BOOSTER 9장르, INSERT/PROP 시스템, 시즌 표현 누적 차단, 회별 비중 자동 조정, SCENE RULES 강화 (씬 분할·번호·대사 형식)** |
+| v2.0 | 완전한 엔진 — 회별 마스터리 4종, GENRE BOOSTER 9장르, INSERT/PROP 시스템, 시즌 표현 누적 차단, 회별 비중 자동 조정, SCENE RULES 강화 |
+| v2.0.1 | [패치 E] 캐릭터+대사 분리 복구 강화 · [패치 F] DOCX/TXT 파일명 규칙 갱신 (각본_제목_v1.0_날짜_시간) |
+| v2.0.2 | [패치 G] 씬 헤딩 시간 표기 5단계 표준 강제 (새벽/오전/오후/저녁/밤) |
+| v2.0.3 | [패치 H] DOCX 출력 모드 토글 — 최종 모드(기본): 비트 헤더 제거 / 집필 모드: 비트 헤더 포함 |
+| v2.0.4 | [패치 I] 외부 모니터링 / 쇼러너 노트 입력 (STEP 2 시즌 아크 영역 + 백업 JSON 스키마 확장) · [Hotfix 1] build_locked_block NameError 수정 |
+| v2.0.5 | [패치 J] 작품 제목 입력 + 백업 파일명/사이드바/PDF 푸터 자동 주입 · [패치 K] 리라이트 모드 자동 로더 (Creator JSON + Series JSON) |
+| v2.0.6 | [Hotfix 2] 백업 복원 시 monitoring_feedback / showrunner_notes 위젯 instantiate 후 직접 수정 오류 해소 (_pending_widget_sync 경로 통과) |
+| v2.0.7 | [패치 L] 최종 모드 DOCX 표지 메타정보 제거 — 시나리오/EPISODE N/장르/기획·제작/엔진버전 5줄 + 끝 © 페이지 + 푸터 자동 스킵 (제작·연출·투자 전달용) |
+| **v2.0.8** | **[패치 M] 씬 번호 회별 리셋 — 새 EP의 첫 비트(Beat 0)는 S#1부터 시작. 시즌 통산 채번 차단. build_write_episode_beat_prompt에 is_first_beat_of_episode 인자 추가** |
 
 ---
 
-© 2026 BLUE JEANS PICTURES · Series Engine v2.0
+© 2026 BLUE JEANS PICTURES · Series Engine v2.0.8
