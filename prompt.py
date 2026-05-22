@@ -910,21 +910,32 @@ CLOSE UP — 팔로워 증가 그래프. 2만에서 32만으로 치솟는 빨간
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ★ 씬 번호는 한 에피소드 안에서 연속 채번한다 (S#1, S#2, S#3 ...). ★
+★ 새 에피소드가 시작되면 S#1로 리셋한다. 시즌 통산 채번 금지. ★
 
 [규칙]
-- 비트가 바뀌어도 씬 번호는 이어진다.
+- 비트가 바뀌어도 씬 번호는 같은 EP 안에서 이어진다.
 - Beat 1이 S#10에서 끝났다면 Beat 2는 S#11부터다.
 - 직전 비트의 마지막 씬 번호 + 1부터 시작한다.
 - 씬 번호를 다시 낮은 번호로 돌리거나 같은 번호를 두 번 쓰지 않는다.
 - 비트 단위로 씬 번호를 새로 매기지 마라. (Beat 2의 첫 씬이 S#1이 아니다.)
+- ★ v2.0.8 — EP가 바뀌면 씬 번호는 S#1부터 다시 시작한다.
+  EP1의 마지막 씬이 S#57이어도, EP2 Beat 0의 첫 씬은 S#1이다.
+  시즌 전체에서 EP를 가로지르는 통산 채번(S#58, S#106, S#215 ...)은 금지.
+  각 에피소드는 독립적인 씬 번호 공간을 가진다.
 
 [잘못된 예]
+EP1 Beat 7: ... S#56, S#57
+EP2 Beat 0: S#58, S#59, ...     ← 시즌 통산 채번. 금지.
+
 Beat 1: S#1, S#2, S#3, S#4, S#5
-Beat 2: S#1, S#2, S#3, ...    ← 비트 단위 채번. 금지.
+Beat 2: S#1, S#2, S#3, ...      ← 같은 EP에서 비트 단위 재채번. 금지.
 
 [올바른 예]
+EP1 Beat 7: ... S#56, S#57
+EP2 Beat 0: S#1, S#2, ...        ← 새 EP는 S#1부터 리셋. 정상.
+
 Beat 1: S#1, S#2, S#3, S#4, S#5
-Beat 2: S#6, S#7, S#8, ...    ← 직전 비트 마지막 +1부터.
+Beat 2: S#6, S#7, S#8, ...       ← 같은 EP 안에서 비트 진행은 이어 채번.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [Intention & Obstacle / Tactics / Hook & Punch]
@@ -2629,6 +2640,7 @@ def build_write_episode_beat_prompt(
     prev_beat_structure_type: str = "",
     episode_context_summary: str = "",
     season_expression_db: dict = None,  # v2.0 신규
+    is_first_beat_of_episode: bool = False,  # ★ v2.0.8 신규
 ) -> str:
     gr = _genre_text(genre)
     genre_enforcement = get_genre_enforcement(genre)
@@ -2644,17 +2656,36 @@ def build_write_episode_beat_prompt(
     treat_block = inputs.get("treatment", "")[:3000]
 
     # 직전 비트 연속성
+    # ★ v2.0.8 — EP 첫 비트일 때는 prev_beat_text가 이전 EP 마지막 비트라는 점을 명시
     prev_block = ""
     if prev_beat_text:
         tail = prev_beat_text[-2500:]
-        prev_block = f"\n[직전 비트 마지막 부분 — 연속성 유지]\n{tail}\n"
+        if is_first_beat_of_episode:
+            prev_block = (
+                f"\n[직전 EP{ep_num - 1} 마지막 부분 — 정서·상황 연결용 참조]\n"
+                f"※ 아래 텍스트는 분위기와 잔향 참조용이다. 씬 번호는 새 EP에서 S#1부터 다시 시작한다.\n"
+                f"{tail}\n"
+            )
+        else:
+            prev_block = f"\n[직전 비트 마지막 부분 — 연속성 유지]\n{tail}\n"
 
     # ★ v2.0 — 직전 비트 마지막 씬 번호 추출 → "이번 비트는 S#{N+1}부터"
     # 같은 EP 안에서 비트가 진행될 때 씬 번호가 거꾸로 가지 않도록 강제.
+    # ★ v2.0.8 — EP 첫 비트(beat_num == 0 / is_first_beat_of_episode=True)인 경우
+    # 이전 EP의 씬 번호를 이어받지 않고 S#1로 리셋. 회별 채번 원칙 준수.
     scene_continuation_block = ""
-    if prev_beat_text:
+    if is_first_beat_of_episode:
+        # 새 EP의 첫 비트 — 무조건 S#1부터
+        scene_continuation_block = (
+            f"\n[★★ 씬 번호 채번 — EP{ep_num} 첫 비트 = S#1부터 리셋]\n"
+            f"- 이번은 EP{ep_num}의 첫 비트(Beat 0)다.\n"
+            f"- 씬 번호는 반드시 S#1부터 시작하라.\n"
+            f"- 직전 EP{max(ep_num - 1, 1)}의 마지막 씬 번호를 이어받지 마라.\n"
+            f"- 시즌 통산 채번은 절대 금지. 각 에피소드는 독립적으로 S#1, S#2, S#3... 으로 채번한다.\n"
+        )
+    elif prev_beat_text:
+        # 같은 EP 안의 비트 진행 — 직전 비트의 마지막 씬 번호 + 1
         import re as _re_scene
-        # 직전 비트 텍스트에서 마지막 "S#N." 패턴 추출
         scene_matches = _re_scene.findall(r'S#(\d+)\s*\.', prev_beat_text)
         if scene_matches:
             last_scene_no = max(int(n) for n in scene_matches)

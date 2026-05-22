@@ -1,5 +1,5 @@
 """
-👖 BLUE JEANS SERIES ENGINE v2.0.6 — main.py
+👖 BLUE JEANS SERIES ENGINE v2.0.8 — main.py
 시즌 아크 → 에피소드 씬 플랜 → 비트 집필 파이프라인
 © 2026 BLUE JEANS PICTURES
 
@@ -51,6 +51,46 @@
     · 수정: _BACKUP_KEYS 순회 중 위젯 key 두 개만 건너뛰고,
             pending dict에 등록 → 페이지 최상단 _pending_sync 처리에서 안전 적용.
     · 효과: 첫 클릭에 바로 복원 성공 (재클릭 불필요), 빨간 오류 박스 사라짐.
+
+★ v2.0.7 미세 패치 (2026-05-23)
+  [패치 L] 최종 모드 DOCX 표지 메타정보 제거
+    · 원인: 최종 모드(비트 헤더 제거)로 출력해도 첫 페이지에
+            "시나리오 / EPISODE N / 장르 / 기획·제작 / Series Engine vN · NN비트"
+            5줄 메타가 그대로 박혀 나옴. 제작·연출·투자 전달용 각본에
+            엔진 메타가 노출되는 문제.
+    · 수정: make_series_docx_bytes 시그니처에 include_cover 인자 추가.
+            기본값 True (기존 동작 유지). build_docx_download에서
+            include_beat_headers=False(최종 모드)인 경우 자동으로
+            include_cover=False 전달 → 표지 페이지 전체 스킵.
+    · 효과: 최종 모드 출력 시 본문 1페이지에서 S#1부터 바로 시작.
+            집필 모드(비트 헤더 포함)는 종전대로 표지 출력.
+
+★ v2.0.8 미세 패치 (2026-05-23)
+  [패치 M] 씬 번호 회별 리셋 — 시즌 통산 채번 차단
+    · 원인: 「왕게임」 실측에서 EP2가 S#58, EP6이 S#215, EP8이 S#312로
+            시즌 통산 채번이 발생. prompt.py 룰은 "에피소드 단위 연속"으로
+            정상 명시되어 있으나, build_write_episode_beat_prompt 함수에
+            구조적 결함이 있었음:
+            - main.py L3079: 새 EP의 첫 비트(Beat 0) 집필 시 prev_beat_text로
+              직전 EP 마지막 비트(EP-1, Beat 7)를 그대로 전달.
+            - prompt.py L2655: prev_beat_text에서 마지막 씬 번호 추출 후
+              "이 비트는 S#{N+1}부터 시작하라" 강제 블록을 생성.
+            - 결과: EP1 Beat 7이 S#57에서 끝나면, EP2 Beat 0이 S#58부터
+              시작하도록 모델에게 강제. EP가 진행될수록 통산 채번이 누적.
+    · 수정:
+            (1) build_write_episode_beat_prompt에 is_first_beat_of_episode
+                인자 추가 (기본 False, 하위 호환).
+            (2) is_first_beat_of_episode=True면 scene_continuation_block을
+                "S#1부터 리셋" 강제 블록으로 대체.
+            (3) prev_block 라벨도 "직전 EP{N-1} 마지막 부분 — 정서·상황
+                연결용 참조 / 씬 번호는 새 EP에서 S#1부터 다시 시작"으로
+                명시화. 모델이 분위기·잔향만 가져오고 씬 번호는 이어받지
+                않도록 분리.
+            (4) main.py 호출부에서 next_beat==0 조건으로 플래그 전달.
+            (5) prompt.py [씬 번호 채번] 룰에 "EP 경계 리셋" 원칙 추가.
+                잘못된 예 / 올바른 예 모두 EP 경계 케이스로 보강.
+    · 효과: 새 EP의 첫 비트는 무조건 S#1부터 시작. 시즌 통산 채번 차단.
+            「왕게임」 같은 누적형 누출 패턴 재발 방지.
 """
 
 import streamlit as st
@@ -95,8 +135,8 @@ from prompt import (
 # Series Engine 컨텍스트에서 동작하도록 통합.
 # ═══════════════════════════════════════════════════════════
 
-ENGINE_VERSION = "v2.0.6"
-ENGINE_BUILD_DATE = "2026-05-20"
+ENGINE_VERSION = "v2.0.8"
+ENGINE_BUILD_DATE = "2026-05-23"
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1162,12 +1202,17 @@ EPISODE N` 마커 포함)인지 단일 EP 텍스트인지 자동 판단해
     어댑터 함수로 위임. 메타데이터(장르/부수/비트 수)는 session_state에서 자동 추출.
     
     ★ v2.0.3 — include_beat_headers 기본 False (최종 모드).
+    ★ v2.0.7 — 최종 모드(include_beat_headers=False)인 경우 표지 페이지
+               자동 제거 (include_cover=False 전달). 집필 모드는 표지 유지.
     """
     try:
         # session_state에서 메타데이터 추출 (있으면)
         _genre = st.session_state.get("genre", "") or ""
         _num_eps = st.session_state.get("num_episodes", 0) or 0
         _beats_count = len(st.session_state.get("episode_beats", {}) or {})
+
+        # ★ v2.0.7 — 최종 모드면 표지 페이지 제거
+        _include_cover = bool(include_beat_headers)
 
         # 시즌 전체 마커 감지
         if "\nEPISODE " in text and ("=" * 30) in text:
@@ -1176,6 +1221,7 @@ EPISODE N` 마커 포함)인지 단일 EP 텍스트인지 자동 판단해
                 genre=_genre, num_episodes=_num_eps,
                 beats_done_count=_beats_count,
                 include_beat_headers=include_beat_headers,
+                include_cover=_include_cover,
             )
         else:
             data = make_series_docx_bytes(
@@ -1183,6 +1229,7 @@ EPISODE N` 마커 포함)인지 단일 EP 텍스트인지 자동 판단해
                 genre=_genre, num_episodes=_num_eps,
                 beats_done_count=_beats_count,
                 include_beat_headers=include_beat_headers,
+                include_cover=_include_cover,
             )
 
         st.download_button(
@@ -1301,6 +1348,7 @@ def make_series_docx_bytes(
     historical: bool = False,
     historical_type: str = "",
     include_beat_headers: bool = False,
+    include_cover: bool = True,
 ) -> bytes:
     """시리즈 시나리오 DOCX — 한국 표준 시나리오 서식.
 
@@ -1327,6 +1375,10 @@ def make_series_docx_bytes(
         ★ v2.0.3 — 비트헤더 출력 여부.
         True  → 집필 모드 (Beat 0~7 헤더 표시, 작가 검토용)
         False → 최종 모드 (비트 헤더 제거, 제작·연출 전달용) — 기본값
+    include_cover : bool, default True
+        ★ v2.0.7 — 표지 페이지 출력 여부.
+        True  → 표지 페이지 출력 (시나리오 / 제목 / 부제 / 기획·제작 / 엔진버전)
+        False → 표지 페이지 생략 (S#1부터 바로 시작 — 최종 전달용)
     """
     import re
     from docx import Document as DocxDocument
@@ -1614,34 +1666,36 @@ def make_series_docx_bytes(
         return p
 
     # ── 커버 페이지 ──
-    for _ in range(6):
+    # ★ v2.0.7 — include_cover=False 시 표지 전체 스킵 (제작·연출 전달용)
+    if include_cover:
+        for _ in range(6):
+            doc.add_paragraph("")
+        add_text("시나리오", size=Pt(11), align=WD_ALIGN_PARAGRAPH.CENTER)
         doc.add_paragraph("")
-    add_text("시나리오", size=Pt(11), align=WD_ALIGN_PARAGRAPH.CENTER)
-    doc.add_paragraph("")
-    add_text(title or "<무제>", bold=True, size=Pt(24), align=WD_ALIGN_PARAGRAPH.CENTER)
-    doc.add_paragraph("")
+        add_text(title or "<무제>", bold=True, size=Pt(24), align=WD_ALIGN_PARAGRAPH.CENTER)
+        doc.add_paragraph("")
 
-    # 부제 (시즌 + 부수 + 장르)
-    subtitle_parts = []
-    if mode == "season" and num_episodes:
-        subtitle_parts.append(f"시즌 1 — {num_episodes}부작")
-    if genre:
-        subtitle_parts.append(genre)
-    if subtitle_parts:
-        add_text(" · ".join(subtitle_parts), size=Pt(12),
+        # 부제 (시즌 + 부수 + 장르)
+        subtitle_parts = []
+        if mode == "season" and num_episodes:
+            subtitle_parts.append(f"시즌 1 — {num_episodes}부작")
+        if genre:
+            subtitle_parts.append(genre)
+        if subtitle_parts:
+            add_text(" · ".join(subtitle_parts), size=Pt(12),
+                     align=WD_ALIGN_PARAGRAPH.CENTER,
+                     color=RGBColor(0x66, 0x66, 0x66))
+            doc.add_paragraph("")
+
+        doc.add_paragraph("")
+        add_text("기획/제작 | 블루진픽처스", size=Pt(10),
                  align=WD_ALIGN_PARAGRAPH.CENTER,
-                 color=RGBColor(0x66, 0x66, 0x66))
-        doc.add_paragraph("")
-
-    doc.add_paragraph("")
-    add_text("기획/제작 | 블루진픽처스", size=Pt(10),
-             align=WD_ALIGN_PARAGRAPH.CENTER,
-             color=RGBColor(0x8E, 0x8E, 0x99))
-    progress = f"  ·  {beats_done_count}비트" if beats_done_count else ""
-    add_text(f"Series Engine {ENGINE_VERSION}{progress}",
-             size=Pt(9), align=WD_ALIGN_PARAGRAPH.CENTER,
-             color=RGBColor(0x8E, 0x8E, 0x99))
-    doc.add_page_break()
+                 color=RGBColor(0x8E, 0x8E, 0x99))
+        progress = f"  ·  {beats_done_count}비트" if beats_done_count else ""
+        add_text(f"Series Engine {ENGINE_VERSION}{progress}",
+                 size=Pt(9), align=WD_ALIGN_PARAGRAPH.CENTER,
+                 color=RGBColor(0x8E, 0x8E, 0x99))
+        doc.add_page_break()
 
     # ── 면책 자막 페이지 ──
     _need_disclaimer = fact_based or (
@@ -3167,6 +3221,8 @@ if st.session_state["episode_plans"]:
                     prev_beat_structure_type=prev_struct,
                     episode_context_summary=ep_summary,
                     season_expression_db=_season_expr_db,  # v2.0
+                    # ★ v2.0.8 — EP 첫 비트(Beat 0)인 경우 씬 번호 S#1부터 리셋
+                    is_first_beat_of_episode=(next_beat == 0),
                 )
                 with st.spinner(f"EP{selected_ep} Beat {next_beat}을 집필하고 있습니다..."):
                     result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_BEAT)
