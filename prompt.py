@@ -2630,6 +2630,54 @@ S#마지막. 장소 — 시간 | [A] | 인물 | ★Punch=클리프행어
 # 3. 비트별 집필
 # ═══════════════════════════════════════════════════════════
 
+import re as _re_sig
+
+
+def _extract_scene_signatures(beat_text: str, max_scenes: int = 12) -> list:
+    """★ v2.0.9 — 비트 본문에서 씬별 시그니처를 추출.
+
+    각 씬을 "장소 / 시간대 | 핵심대사" 한 줄로 요약해 반환한다.
+    비트 간 중복 차단 목록에 쓰인다. 내부 메모([내부 메모]/[소품 상태])는
+    제외하고 시나리오 본문만 대상으로 한다.
+
+    추론이 아니라 실제 백업 JSON(범죄스릴러 8ep) 본문 구조로 검증된 로직이다.
+    """
+    if not beat_text:
+        return []
+
+    # 시나리오 본문만 사용 — 메모 블록 이전까지 잘라낸다.
+    body = beat_text
+    for marker in ("\n[내부 메모]", "\n**내부 메모**", "\n[소품 상태"):
+        if marker in body:
+            body = body.split(marker)[0]
+
+    # 씬 헤딩: S#1. INT. 장소 — 시간대
+    scene_re = _re_sig.compile(
+        r'S#\d+\.\s*(?:INT\.|EXT\.|INT/EXT\.)?\s*([^\n—]+?)\s*—\s*([^\n]+)'
+    )
+    # 캐릭터 대사: 이름\t\t(지시) 대사
+    dlg_re = _re_sig.compile(r'([가-힣]{2,4})\t+(?:\([^)]*\)\s*)?([^\n]{4,30})')
+
+    sigs = []
+    headings = list(scene_re.finditer(body))
+    for idx, m in enumerate(headings):
+        place = m.group(1).strip()
+        timeofday = m.group(2).strip()
+        start = m.end()
+        end = headings[idx + 1].start() if idx + 1 < len(headings) else len(body)
+        seg = body[start:end]
+        dlg = dlg_re.findall(seg)
+        if dlg:
+            speaker, line = dlg[0]
+            sig = f'{place} / {timeofday} | {speaker}: "{line.strip()}"'
+        else:
+            sig = f'{place} / {timeofday} | (무대사)'
+        sigs.append(sig)
+        if len(sigs) >= max_scenes:
+            break
+    return sigs
+
+
 def build_write_episode_beat_prompt(
     inputs: dict, season_arc: str, episode_plan: str,
     ep_num: int, beat_num: int,
@@ -2697,24 +2745,36 @@ def build_write_episode_beat_prompt(
                 f"- 씬 번호를 거꾸로 돌리거나 비트 단위로 재채번하지 마라.\n"
             )
 
-    # v1.8: 에피소드 내 이전 비트 핵심 행동 목록 (비트 간 중복 방지)
+    # v1.8 / ★ v2.0.9: 에피소드 내 이전 비트 장면 시그니처 목록 (비트 간 중복 방지)
+    # ★ v2.0.9 — 두 가지 결함 수정:
+    #   (1) 기존 `beat_num > 1` → `beat_num >= 1`로 변경.
+    #       기존 코드는 Beat 0·1을 건너뛰어, Beat 0이 그린 장면(예: 덕문 사무실
+    #       보고 씬)이 Beat 1 집필 시 차단 목록에 들어가지 않았다. 그 결과
+    #       Beat 0의 장면이 Beat 1에서 거의 그대로 복제되는 누출이 발생.
+    #   (2) 기존에는 직전 비트 "메모 첫 줄(추상 요약)"만 전달 → 모델이 구체적
+    #       장면 구성요소(장소·구도·대사)를 인지 못 해 같은 셋업을 재생성.
+    #       이제 각 비트 본문에서 씬별 (장소 / 시간대 / 핵심 대사 1개)를 추출해
+    #       전달 → "같은 장소+같은 인물+같은 대사 패턴" 조합 자체를 차단.
     prev_actions_block = ""
-    if beat_num > 1:
-        action_lines = []
+    if beat_num >= 1:
+        sig_lines = []
         for prev_b in range(beat_num):
             prev_key = f"{ep_num}_{prev_b}"
             if prev_key in (inputs.get("_episode_beats", {}) or {}):
                 prev_text = inputs["_episode_beats"][prev_key]
-                # --- 뒤의 메모에서 비트 요약 1줄 추출
-                if "---" in prev_text:
-                    memo = prev_text.split("---", 1)[1]
-                    first_line = memo.strip().split("\n")[0][:150]
-                    action_lines.append(f"  Beat {prev_b}: {first_line}")
-        if action_lines:
+                for sig in _extract_scene_signatures(prev_text):
+                    sig_lines.append(f"  - Beat {prev_b}: {sig}")
+        if sig_lines:
             prev_actions_block = (
-                f"\n[⚠️ 이 에피소드에서 이미 발생한 장면 — 중복 금지]\n"
-                + "\n".join(action_lines)
-                + "\n→ 위 장면과 동일한 장소+상황+행동 조합을 반복하지 마라.\n"
+                f"\n[⚠️ 이 에피소드(EP{ep_num})에서 이미 집필된 씬 — 중복 금지]\n"
+                + "\n".join(sig_lines)
+                + "\n"
+                + "→ 위 씬과 동일한 [장소 + 인물 + 상황] 조합을 다시 쓰지 마라.\n"
+                + "→ 특히 같은 장소에서 같은 인물이 같은 종류의 대사(보고·지시·통보)를\n"
+                + "   반복하는 셋업을 재생성하지 마라. (예: '덕문 사무실에서 부하가\n"
+                + "   보고서를 보고하는' 장면, '회의실에서 상부가 보류를 통보하는' 장면 등)\n"
+                + "→ 같은 장소를 꼭 재사용해야 한다면: 시간대를 바꾸고, 새로운 사건이\n"
+                + "   개입하고, 인물의 관계나 상황이 직전과 달라져야 한다.\n"
             )
 
     # v1.8: 적응형 컨텍스트 관리 — EP 진행에 따라 정보량 자동 조절
