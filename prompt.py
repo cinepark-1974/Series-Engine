@@ -2503,6 +2503,45 @@ def build_episode_plan_prompt(
             f"주인공 시그니처 행동·소품을 EP1 안에 심어 EP8 회수 준비.\n"
         )
 
+    # ★ v2.1.0 — 해당 EP 구간을 시즌 아크에서 추출해 별도 전달
+    # 원인: season_arc[:4000] 잘림으로 후반 EP의 A-Story가 프롬프트에서
+    #       사라질 수 있음. EP 구간을 따로 뽑아 누락을 차단.
+    ep_arc_section = ""
+    try:
+        import re as _re_arc
+        # "### EP{n}" 헤더 기준으로 해당 EP 블록만 추출
+        marker = f"### EP{ep_num}"
+        start = season_arc.find(marker)
+        if start >= 0:
+            nxt = season_arc.find(f"### EP{ep_num + 1}", start)
+            ep_arc_section = season_arc[start:nxt if nxt > 0 else start + 2500]
+    except Exception:
+        ep_arc_section = ""
+
+    ep_arc_block = ""
+    if ep_arc_section.strip():
+        ep_arc_block = (
+            f"\n══ ★ EP{ep_num} 시즌 아크 구간 (이 회 전용 — 전문) ══\n"
+            f"{ep_arc_section[:3000]}\n"
+        )
+
+    # ★ v2.1.0 — 핵심 사건 장면화 강제 블록
+    # 원인: 「왕게임」 EP1 실측에서 시즌 아크 A-Story에 명시된 '피의 밤'
+    #       (마약왕 3명 동시 사망 + 증거 창고 화재)이 씬으로 분해되지 않고
+    #       전사(前史)로 요약 처리됨 → 비트 집필에서 장면 자체가 생성 안 됨.
+    # 해결: 아크 A-Story의 핵심 사건을 빠짐없이 씬으로 분해하도록 강제.
+    key_event_block = (
+        f"\n[★★ v2.1.0 — A-Story 핵심 사건 장면화 강제 — 누락 시 실패]\n"
+        f"- 위 'EP{ep_num} 시즌 아크 구간'의 A-Story에 적힌 사건은 전부 씬으로 분해하라.\n"
+        f"- 일어난 사건을 대사·메모·회상 요약으로 대체하지 마라. 사건은 장면으로 그린다.\n"
+        f"  (예: '특진 작전을 강행했다'고 요약 금지 → 작전 강행 장면을 씬으로 배치.)\n"
+        f"- 도입부 충격 사건(마약왕 동시 사망·대형 화재·습격 등 '판을 여는 사건')은\n"
+        f"  반드시 Cold Opening 또는 Beat 1에 실시간 장면으로 배치하라.\n"
+        f"  이미 일어난 일로 처리해 그 여파만 그리는 것을 금지한다.\n"
+        f"- 씬 플랜 완성 후, 아크 A-Story의 각 사건 옆에 그것을 담은 S#번호를\n"
+        f"  대응시켜 누락이 없는지 자가 점검하라.\n"
+    )
+
     return f"""아래 시즌 아크와 기획 자료를 바탕으로 **EP{ep_num}의 씬 플랜**을 작성하라.
 
 {LOCKED_SYSTEM_RULES if locked_block else ""}
@@ -2513,7 +2552,7 @@ def build_episode_plan_prompt(
 
 ══ 시즌 아크 ══
 {season_arc[:4000]}
-
+{ep_arc_block}
 ══ 장르 ══
 {gr}
 
@@ -2527,6 +2566,7 @@ def build_episode_plan_prompt(
 ══ EP{ep_num} 씬 플랜 작성 규칙 ══
 
 분량: {duration}분, 씬 수: {target['scenes']}, 비트당: {target['beat_scenes']}
+{key_event_block}
 
 [씬 다양성 — 에피소드를 지루하지 않게 채우는 핵심]
 5종 씬 타입을 반드시 혼합 배치하라:
@@ -2622,6 +2662,7 @@ S#마지막. 장소 — 시간 | [A] | 인물 | ★Punch=클리프행어
 - Payoff 배치: 이 에피소드에서 회수하는 것
 - 기능적 조연 목록
 - 비밀 경제 현황: 터진 비밀 / 새로 생긴 비밀 / 유지 중인 비밀
+- ★ A-Story 핵심 사건 장면화 체크: 이 회 시즌 아크 A-Story의 각 사건 → 대응 S#번호 (누락 0건 확인)
 
 한국어, 간결하고 시각적인 시나리오 작가의 언어로."""
 
@@ -2629,54 +2670,6 @@ S#마지막. 장소 — 시간 | [A] | 인물 | ★Punch=클리프행어
 # ═══════════════════════════════════════════════════════════
 # 3. 비트별 집필
 # ═══════════════════════════════════════════════════════════
-
-import re as _re_sig
-
-
-def _extract_scene_signatures(beat_text: str, max_scenes: int = 12) -> list:
-    """★ v2.0.9 — 비트 본문에서 씬별 시그니처를 추출.
-
-    각 씬을 "장소 / 시간대 | 핵심대사" 한 줄로 요약해 반환한다.
-    비트 간 중복 차단 목록에 쓰인다. 내부 메모([내부 메모]/[소품 상태])는
-    제외하고 시나리오 본문만 대상으로 한다.
-
-    추론이 아니라 실제 백업 JSON(범죄스릴러 8ep) 본문 구조로 검증된 로직이다.
-    """
-    if not beat_text:
-        return []
-
-    # 시나리오 본문만 사용 — 메모 블록 이전까지 잘라낸다.
-    body = beat_text
-    for marker in ("\n[내부 메모]", "\n**내부 메모**", "\n[소품 상태"):
-        if marker in body:
-            body = body.split(marker)[0]
-
-    # 씬 헤딩: S#1. INT. 장소 — 시간대
-    scene_re = _re_sig.compile(
-        r'S#\d+\.\s*(?:INT\.|EXT\.|INT/EXT\.)?\s*([^\n—]+?)\s*—\s*([^\n]+)'
-    )
-    # 캐릭터 대사: 이름\t\t(지시) 대사
-    dlg_re = _re_sig.compile(r'([가-힣]{2,4})\t+(?:\([^)]*\)\s*)?([^\n]{4,30})')
-
-    sigs = []
-    headings = list(scene_re.finditer(body))
-    for idx, m in enumerate(headings):
-        place = m.group(1).strip()
-        timeofday = m.group(2).strip()
-        start = m.end()
-        end = headings[idx + 1].start() if idx + 1 < len(headings) else len(body)
-        seg = body[start:end]
-        dlg = dlg_re.findall(seg)
-        if dlg:
-            speaker, line = dlg[0]
-            sig = f'{place} / {timeofday} | {speaker}: "{line.strip()}"'
-        else:
-            sig = f'{place} / {timeofday} | (무대사)'
-        sigs.append(sig)
-        if len(sigs) >= max_scenes:
-            break
-    return sigs
-
 
 def build_write_episode_beat_prompt(
     inputs: dict, season_arc: str, episode_plan: str,
@@ -2689,6 +2682,7 @@ def build_write_episode_beat_prompt(
     episode_context_summary: str = "",
     season_expression_db: dict = None,  # v2.0 신규
     is_first_beat_of_episode: bool = False,  # ★ v2.0.8 신규
+    world_setting: str = "",  # ★ v2.0.9 신규 — 세계관/스케일 주입
 ) -> str:
     gr = _genre_text(genre)
     genre_enforcement = get_genre_enforcement(genre)
@@ -2745,36 +2739,24 @@ def build_write_episode_beat_prompt(
                 f"- 씬 번호를 거꾸로 돌리거나 비트 단위로 재채번하지 마라.\n"
             )
 
-    # v1.8 / ★ v2.0.9: 에피소드 내 이전 비트 장면 시그니처 목록 (비트 간 중복 방지)
-    # ★ v2.0.9 — 두 가지 결함 수정:
-    #   (1) 기존 `beat_num > 1` → `beat_num >= 1`로 변경.
-    #       기존 코드는 Beat 0·1을 건너뛰어, Beat 0이 그린 장면(예: 덕문 사무실
-    #       보고 씬)이 Beat 1 집필 시 차단 목록에 들어가지 않았다. 그 결과
-    #       Beat 0의 장면이 Beat 1에서 거의 그대로 복제되는 누출이 발생.
-    #   (2) 기존에는 직전 비트 "메모 첫 줄(추상 요약)"만 전달 → 모델이 구체적
-    #       장면 구성요소(장소·구도·대사)를 인지 못 해 같은 셋업을 재생성.
-    #       이제 각 비트 본문에서 씬별 (장소 / 시간대 / 핵심 대사 1개)를 추출해
-    #       전달 → "같은 장소+같은 인물+같은 대사 패턴" 조합 자체를 차단.
+    # v1.8: 에피소드 내 이전 비트 핵심 행동 목록 (비트 간 중복 방지)
     prev_actions_block = ""
-    if beat_num >= 1:
-        sig_lines = []
+    if beat_num > 1:
+        action_lines = []
         for prev_b in range(beat_num):
             prev_key = f"{ep_num}_{prev_b}"
             if prev_key in (inputs.get("_episode_beats", {}) or {}):
                 prev_text = inputs["_episode_beats"][prev_key]
-                for sig in _extract_scene_signatures(prev_text):
-                    sig_lines.append(f"  - Beat {prev_b}: {sig}")
-        if sig_lines:
+                # --- 뒤의 메모에서 비트 요약 1줄 추출
+                if "---" in prev_text:
+                    memo = prev_text.split("---", 1)[1]
+                    first_line = memo.strip().split("\n")[0][:150]
+                    action_lines.append(f"  Beat {prev_b}: {first_line}")
+        if action_lines:
             prev_actions_block = (
-                f"\n[⚠️ 이 에피소드(EP{ep_num})에서 이미 집필된 씬 — 중복 금지]\n"
-                + "\n".join(sig_lines)
-                + "\n"
-                + "→ 위 씬과 동일한 [장소 + 인물 + 상황] 조합을 다시 쓰지 마라.\n"
-                + "→ 특히 같은 장소에서 같은 인물이 같은 종류의 대사(보고·지시·통보)를\n"
-                + "   반복하는 셋업을 재생성하지 마라. (예: '덕문 사무실에서 부하가\n"
-                + "   보고서를 보고하는' 장면, '회의실에서 상부가 보류를 통보하는' 장면 등)\n"
-                + "→ 같은 장소를 꼭 재사용해야 한다면: 시간대를 바꾸고, 새로운 사건이\n"
-                + "   개입하고, 인물의 관계나 상황이 직전과 달라져야 한다.\n"
+                f"\n[⚠️ 이 에피소드에서 이미 발생한 장면 — 중복 금지]\n"
+                + "\n".join(action_lines)
+                + "\n→ 위 장면과 동일한 장소+상황+행동 조합을 반복하지 마라.\n"
             )
 
     # v1.8: 적응형 컨텍스트 관리 — EP 진행에 따라 정보량 자동 조절
@@ -2881,6 +2863,27 @@ def build_write_episode_beat_prompt(
 - 감정 연쇄: 이 클리프행어의 감정이 다음 에피소드 콜드 오프닝의 전제다.
 """
 
+    # ★ v2.0.9 — 세계관/스케일 블록
+    # 원인: 비트 집필 프롬프트가 inputs.world(세계관 전문)를 받지 못해
+    #       AI가 로컬 씬 플랜만으로 집필 → 글로벌 스케일이 동네 단위로 축소됨.
+    # 해결: 세계관 전문을 독립 슬롯으로 주입 + 스케일 환기 + 다중 빌런 현존 강제.
+    world_block = ""
+    if world_setting and world_setting.strip():
+        world_block = f"""
+[🌐 세계관 — 스케일·규칙·권력구조 — 반드시 반영. 누락 시 실패.]
+{world_setting[:2500]}
+
+[세계관 스케일 강제 규칙]
+1. 이 비트의 사건은 더 큰 네트워크의 일부다. 로컬 장면이라도 그 너머의
+   규모를 환기시키는 디테일을 최소 1개 심어라.
+   (예: 컨테이너 송장의 외국어, 해외 송금 흔적, 국경 너머 통신, 상위 조직의 지시)
+2. 위 권력구조의 빌런이 2인 이상이면, 각 빌런은 이 비트에 직접 등장하지
+   않더라도 흔적·대리인·영향력 중 하나로 최소 1회 현존시켜라.
+   직접 등장이 어려운 빌런은 단서·소품·제3자의 입을 통해 존재를 각인시킨다.
+3. 세계관의 규칙(예: 로얄 스탬프, 금기, 감시망)이 이 비트에 관여한다면
+   설명이 아니라 장면의 사건으로 작동시켜라.
+"""
+
     # 핵심 요소 블록
     elements_block = ""
     if story_elements:
@@ -2910,6 +2913,7 @@ def build_write_episode_beat_prompt(
 {gr}
 
 [로그라인] {inputs.get('logline', '(씬 플랜 참조)')[:300]}
+{world_block}
 {cold_open_block}
 {cliff_block}
 

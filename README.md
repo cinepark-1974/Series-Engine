@@ -1,4 +1,4 @@
-# 👖 BLUE JEANS SERIES ENGINE v2.0.8
+# 👖 BLUE JEANS SERIES ENGINE v2.1.0
 
 **Netflix 미니시리즈/시리즈(시즌 1) 시나리오 집필 엔진**
 
@@ -71,6 +71,8 @@ STEP 4: 비트별 집필 (Opus) ← 에피소드당 8비트 = 8회 클릭
   → Genre Drive 5점 + AI Escape A1~A17 + 비트 구조 변주
   → ★ v2.0 — 같은 EP 안에서 직전 비트 마지막 씬 번호 자동 추출 → S#(N+1)부터 강제
   → ★ v2.0.8 — 새 EP의 첫 비트(Beat 0)는 S#1부터 리셋 (시즌 통산 채번 차단)
+  → ★ v2.1.0 — 세계관 전문(inputs.world) 비트 주입 + 스케일 환기 강제 + 다중 빌런 EP당 현존 (글로벌 스케일 축소 차단)
+  → ★ v2.1.0 — 씬 플랜: 시즌 아크 A-Story 핵심 사건 장면화 강제 + EP 구간 별도 전달 (피의 밤 같은 도입 사건 누락 차단)
   → ★ v2.0 — INSERT 시스템 + PROP 연속성 + GENRE BOOSTER + HELPER 룰 자동 주입
   → ★ v2.0 — 회별 마스터리 모듈 자동 분기 (EP1·EP4·EP6·EP8)
   → ★ v2.0 — 시즌 표현 누적 DB 자동 추출·차단 (AI Escape A17 해결)
@@ -162,8 +164,9 @@ Creator Engine / Writer Engine과 완전 통일:
 | v2.0.5 | [패치 J] 작품 제목 입력 + 백업 파일명/사이드바/PDF 푸터 자동 주입 · [패치 K] 리라이트 모드 자동 로더 (Creator JSON + Series JSON) |
 | v2.0.6 | [Hotfix 2] 백업 복원 시 monitoring_feedback / showrunner_notes 위젯 instantiate 후 직접 수정 오류 해소 (_pending_widget_sync 경로 통과) |
 | v2.0.7 | [패치 L] 최종 모드 DOCX 표지 메타정보 제거 — 시나리오/EPISODE N/장르/기획·제작/엔진버전 5줄 + 끝 © 페이지 + 푸터 자동 스킵 (제작·연출·투자 전달용) |
-| **v2.0.8** | **[패치 M] 씬 번호 회별 리셋 — 새 EP의 첫 비트(Beat 0)는 S#1부터 시작. 시즌 통산 채번 차단. build_write_episode_beat_prompt에 is_first_beat_of_episode 인자 추가** |
+| v2.0.8 | [패치 M] 씬 번호 회별 리셋 — 새 EP의 첫 비트(Beat 0)는 S#1부터 시작. 시즌 통산 채번 차단. build_write_episode_beat_prompt에 is_first_beat_of_episode 인자 추가 |
+| **v2.1.0** | **[패치 N] 세계관/스케일 비트 주입 — build_write_episode_beat_prompt에 world_setting 인자 추가. inputs.world 전문을 [🌐 세계관] 블록으로 주입 + 스케일 환기 강제 + 다중 빌런 EP당 현존 강제 · [패치 O] 씬 플랜 A-Story 핵심 사건 장면화 강제 — build_episode_plan_prompt에 EP 구간 별도 추출 + 핵심 사건→S#번호 대응 점검. 피의 밤 같은 도입 사건이 전사로 요약 처리되어 누락되는 패턴 차단** |
 
 ---
 
-© 2026 BLUE JEANS PICTURES · Series Engine v2.0.8
+© 2026 BLUE JEANS PICTURES · Series Engine v2.1.0
