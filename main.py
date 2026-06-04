@@ -145,6 +145,29 @@
                 점검' 항목 추가.
     · 효과: 시즌 아크가 약속한 핵심 사건이 씬 플랜에서 누락되지 않음.
             피의 밤 같은 도입 사건이 장면으로 분해되어 각본에 생성됨.
+
+★ v2.1.1 미세 패치 (2026-06-04)
+  [패치 P] 비트 자가검증 메모의 최종 산출물 노출 차단
+    · 원인: 「왕게임」 EP1 DOCX 실측에서, 각 비트 끝 자가검증 메모
+            (비트 요약 / SCOPE / 장르 드라이브 5점 / 표현 변주 점검 /
+            소품 상태 / AI ESCAPE 등)가 각본 본문에 그대로 노출됨.
+            비트 집필 프롬프트([OUTPUT] 사양)는 의도적으로 본문 종료 후
+            '\n---\n' 구분선에 이어 메모를 출력하는데(품질 자가검증 장치),
+            get_all_episode_text가 이 메모를 절단하지 않고 비트를 이어붙여
+            DOCX·TXT로 전달 → 메모가 씬 사이에 그대로 박힘.
+            백업 JSON 8개 비트 전수 검증 결과 메모는 본문 종료 직후
+            '\n---\n' 마커로 100% 일관 구분됨을 확인.
+    · 수정:
+            (1) strip_beat_meta(beat_text) 헬퍼 신설 — '\n---\n' 이후 절단.
+                본문 내 '--- TITLE ---'처럼 양끝 텍스트가 붙은 구분선은
+                패턴 불일치로 보존.
+            (2) get_all_episode_text에서 비트 결합 시 strip_beat_meta 적용.
+                단일 진입점이므로 에피소드별/시즌 전체 · DOCX/TXT 전 경로에
+                자동 반영.
+            (3) episode_beats 원본·백업 JSON은 미변경 — 자가검증 메모는
+                화면·백업에 유지되어 집필 품질 장치로 계속 작동.
+    · 효과: 최종 산출물(DOCX·TXT)에서 메타 메모 완전 제거, 본문 보존.
+            EP1뿐 아니라 EP2~8 및 타 작품도 동일 경로로 일괄 해결.
 """
 
 import streamlit as st
@@ -189,7 +212,7 @@ from prompt import (
 # Series Engine 컨텍스트에서 동작하도록 통합.
 # ═══════════════════════════════════════════════════════════
 
-ENGINE_VERSION = "v2.1.0"
+ENGINE_VERSION = "v2.1.1"
 ENGINE_BUILD_DATE = "2026-05-23"
 
 
@@ -1218,12 +1241,36 @@ def _get_locked_block() -> str:
     return build_locked_block(locked, open_items)
 
 
+# ★ v2.1.1 — 비트 자가검증 메모 절단 (최종 산출물 메타 노출 방지)
+def strip_beat_meta(beat_text: str) -> str:
+    """비트 집필 결과에서 '---' 이후 자가검증 메모를 제거한다.
+
+    배경: 비트 집필 프롬프트([OUTPUT] 사양)는 의도적으로 각 비트 본문
+    종료 후 '\\n---\\n' 구분선에 이어 자가검증 메모(비트 요약 / SCOPE /
+    장르 드라이브 5점 / 표현 변주 점검 / 소품 상태 / AI ESCAPE 등)를
+    출력한다. 이 메모는 집필 품질 장치이므로 화면·백업(episode_beats)에는
+    그대로 유지하되, DOCX·TXT 최종 산출물에서는 본문만 남겨야 한다.
+
+    구분 마커는 '\\n---\\n' 단일 사용 — 프롬프트 사양과 정합하며,
+    백업 JSON 전 비트 검증 결과 본문 종료 직후 한 번만 등장한다.
+    본문 내 '--- TITLE ---'처럼 양끝에 텍스트가 붙은 구분선은
+    '\\n---\\n' 패턴과 일치하지 않으므로 안전하게 보존된다.
+    """
+    if not beat_text:
+        return beat_text
+    idx = beat_text.find("\n---\n")
+    if idx > 0:
+        return beat_text[:idx].rstrip()
+    return beat_text.rstrip()
+
+
 def get_all_episode_text(ep: int) -> str:
     parts = []
     for b in range(8):
         key = bk(ep, b)
         if key in st.session_state["episode_beats"]:
-            parts.append(st.session_state["episode_beats"][key])
+            # ★ v2.1.1 — 출력용 텍스트는 자가검증 메모 제거 (원본 episode_beats는 보존)
+            parts.append(strip_beat_meta(st.session_state["episode_beats"][key]))
     return "\n\n".join(parts)
 
 
