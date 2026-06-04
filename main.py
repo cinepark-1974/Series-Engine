@@ -1,5 +1,5 @@
 """
-👖 BLUE JEANS SERIES ENGINE v2.1.0 — main.py
+👖 BLUE JEANS SERIES ENGINE v2.1.2 — main.py
 시즌 아크 → 에피소드 씬 플랜 → 비트 집필 파이프라인
 © 2026 BLUE JEANS PICTURES
 
@@ -168,6 +168,26 @@
                 화면·백업에 유지되어 집필 품질 장치로 계속 작동.
     · 효과: 최종 산출물(DOCX·TXT)에서 메타 메모 완전 제거, 본문 보존.
             EP1뿐 아니라 EP2~8 및 타 작품도 동일 경로로 일괄 해결.
+
+★ v2.1.2 미세 패치 (2026-06-04)
+  [패치 Q] DOCX 표지 정책 분리 — 표지는 출력 단위 기준, 비트 헤더는 모드 기준
+    · 원인: v2.0.7에서 표지 유무를 비트 헤더(집필/최종 모드)에 묶음
+            (_include_cover = bool(include_beat_headers)). 그 결과 최종
+            모드를 고르면 에피소드별 낱장 각본까지 표지가 사라짐.
+            에피소드별 DOCX는 그 자체로 독립 전달 문서이므로(작품명·화수·
+            장르 식별 필수) 표지가 있어야 한다는 제작 실무 요건과 어긋남.
+    · 수정:
+            (1) build_docx_download에서 _include_cover = True 로 변경 —
+                에피소드별·시즌 전체 모두 표지 1장 유지. 시즌 전체는 맨 앞
+                시즌 표지 1장 + EP 사이는 기존 분리 간지(EPISODE N)만이므로
+                표지가 중간에 중복 생성되지 않음.
+            (2) 표지의 엔진 메타 줄(Series Engine vX · N비트)은 집필 모드
+                (include_beat_headers=True)에서만 출력. 최종 전달본 표지는
+                '시나리오 / 제목 / 장르 / 기획·제작'까지만 남겨 깔끔하게.
+            (3) 비트 헤더는 종전대로 집필/최종 토글이 독립 제어.
+    · 효과: 에피소드별 최종본도 표지 유지. 시즌 전체 최종본은 시즌 표지
+            1장만. 표지와 비트 헤더의 제어축이 분리되어 '표지 있는 최종본'
+            조합이 가능해짐.
 """
 
 import streamlit as st
@@ -212,7 +232,7 @@ from prompt import (
 # Series Engine 컨텍스트에서 동작하도록 통합.
 # ═══════════════════════════════════════════════════════════
 
-ENGINE_VERSION = "v2.1.1"
+ENGINE_VERSION = "v2.1.2"
 ENGINE_BUILD_DATE = "2026-05-23"
 
 
@@ -1312,8 +1332,12 @@ EPISODE N` 마커 포함)인지 단일 EP 텍스트인지 자동 판단해
         _num_eps = st.session_state.get("num_episodes", 0) or 0
         _beats_count = len(st.session_state.get("episode_beats", {}) or {})
 
-        # ★ v2.0.7 — 최종 모드면 표지 페이지 제거
-        _include_cover = bool(include_beat_headers)
+        # ★ v2.1.2 — 표지 정책을 출력 단위 기준으로 분리.
+        #   에피소드별·시즌 전체 모두 표지 1장 유지 (낱장 EP는 독립 문서이므로 표지 필수,
+        #   시즌 전체는 맨 앞 시즌 표지 1장 + EP 사이는 분리 간지만 — 표지 중복 없음).
+        #   비트 헤더는 종전대로 집필/최종 토글(include_beat_headers)이 별도 제어.
+        #   엔진 메타 줄(Series Engine vX · N비트)은 최종 모드 표지에서 자동 제외(make_series_docx_bytes 내).
+        _include_cover = True
 
         # 시즌 전체 마커 감지
         if "\nEPISODE " in text and ("=" * 30) in text:
@@ -1792,10 +1816,13 @@ def make_series_docx_bytes(
         add_text("기획/제작 | 블루진픽처스", size=Pt(10),
                  align=WD_ALIGN_PARAGRAPH.CENTER,
                  color=RGBColor(0x8E, 0x8E, 0x99))
-        progress = f"  ·  {beats_done_count}비트" if beats_done_count else ""
-        add_text(f"Series Engine {ENGINE_VERSION}{progress}",
-                 size=Pt(9), align=WD_ALIGN_PARAGRAPH.CENTER,
-                 color=RGBColor(0x8E, 0x8E, 0x99))
+        # ★ v2.1.2 — 엔진 메타 줄(Series Engine vX · N비트)은 집필 모드에서만 표시.
+        #   최종 전달본 표지는 깔끔하게 — 기획·제작 표기까지만 남김.
+        if include_beat_headers:
+            progress = f"  ·  {beats_done_count}비트" if beats_done_count else ""
+            add_text(f"Series Engine {ENGINE_VERSION}{progress}",
+                     size=Pt(9), align=WD_ALIGN_PARAGRAPH.CENTER,
+                     color=RGBColor(0x8E, 0x8E, 0x99))
         doc.add_page_break()
 
     # ── 면책 자막 페이지 ──
