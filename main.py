@@ -232,7 +232,7 @@ from prompt import (
 # Series Engine 컨텍스트에서 동작하도록 통합.
 # ═══════════════════════════════════════════════════════════
 
-ENGINE_VERSION = "v2.1.6"
+ENGINE_VERSION = "v2.1.7"
 ENGINE_BUILD_DATE = "2026-05-23"
 
 
