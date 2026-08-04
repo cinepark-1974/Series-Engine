@@ -1,5 +1,5 @@
 """
-👖 BLUE JEANS SERIES ENGINE v2.2.0 — main.py
+👖 BLUE JEANS SERIES ENGINE v2.2.1 — main.py
 시즌 아크 → 에피소드 씬 플랜 → 비트 집필 파이프라인
 © 2026 BLUE JEANS PICTURES
 
@@ -225,6 +225,47 @@
     · 원칙: 차단하지 않는다. 자동 치환·자동 재생성도 하지 않는다.
             검출 결과만 보여주고 재생성 여부는 작가가 판단한다.
     · 리라이트 시 rebuild_expression_db로 DB 전체 재계산 (카운터 정합).
+
+★ v2.2.1 (2026-08-04) — 〈거래〉 [문체 기준] 정합
+  [패치 U] 작품별 표현 면제 문구
+    · 원인: 계량_센티 상한 0과 작품 설정이 충돌. 〈거래〉는 정산서 규격
+            '가로 8센티, 세로 12센티'와 요정 신장 '120센티'가 플롯상
+            필수 물증이다. 상한 0이면 매 비트 프롬프트가 "센티 금지"를
+            지시하고, tone 문서는 "정확히 표기하라"고 지시한다.
+            모델에게 서로 반대되는 명령이 동시에 들어간다.
+    · 수정: expression_exemptions 세션 필드 신설 + STEP 4 편집 UI.
+            등록 문구는 추출 전 마스킹되어 일반 계량 카운터에서 빠지고,
+            '면제:{문구}' 키로 EP당 1회 상한이 따로 걸린다.
+            2회째부터 "'같은 규격'으로 받아라"가 프롬프트에 주입된다.
+            검증(C4/C4b)에서도 면제 문구는 제외된다.
+    · 원칙 유지: 하드코딩 없음. 작품마다 작가가 등록한다.
+
+  [패치 V] 카운터 지시문 교정 — 유의어 대체 차단
+    · 원인: v2.2.0 카운터 블록이 "다른 표현으로 대체하라"고 지시했다.
+            [문체 기준] 13항은 정반대다 — '서랍'이 막혔다고 '수납장'으로
+            바꾸는 것은 회피이며, 그 이미지를 아예 쓰지 말라는 것이다.
+            유의어 대체를 허용하면 반복 구조는 그대로 두고 표면 어휘만
+            갈아치우는 whack-a-mole이 된다.
+    · 수정: "그 이미지를 아예 쓰지 마라 / 유의어로 바꾸는 것은 회피다 /
+            다른 행동으로 같은 목적을 달성하라"로 교체.
+
+  [패치 W] DOCX 씬 번호 자동 재채번
+    · 원인: [문체 기준] 19항 — "씬 번호는 DOCX 자동 채번이 담당한다."
+            비트가 독립 호출이라 모델이 매긴 S# 번호는 어긋날 수 있다.
+    · 수정: make_series_docx_bytes에 auto_scene_number 옵션 신설(기본 ON).
+            헤딩의 기존 S#번호를 떼고 엔진이 에피소드 단위로 다시 채번.
+            EPISODE N 마커에서 1로 리셋. STEP 5에 토글 배치.
+    · 범위 결정: 집필 프롬프트의 S# 채번 강제(v2.0.8)는 유지한다.
+            S#는 비트 간 씬 연속성·중복 검출·PROP 추적의 기준점이라
+            집필 층에서 걷어내면 연속성 통제 수단이 사라진다.
+            "본문에 S# 미표기"는 출력 층에서 해결하는 것이 안전하다.
+
+  [패치 X] 다어절 인물명 제외 대응
+    · 원인: 백업 시드 _names에 '강 상무', '친구 B'처럼 공백 표기가 있다.
+            명사 카운터는 어절 단위라 통짜 문자열이 매칭되지 않아
+            '상무'가 일반 명사로 오집계된다.
+    · 수정: _expand_name_tokens — 어절로 쪼개 한글 조각(2~4자)까지
+            제외 집합에 포함. rebuild 시에도 시드 인물명 보존.
 """
 
 import streamlit as st
@@ -265,6 +306,9 @@ from prompt import (
     SKELETON_PATTERNS,
     SKELETON_LIMITS,
     SKELETON_LABELS,
+    get_skeleton_limit,
+    get_skeleton_label,
+    EXEMPT_LIMIT_PER_EP,
 )
 
 # ═══════════════════════════════════════════════════════════
@@ -274,7 +318,7 @@ from prompt import (
 # Series Engine 컨텍스트에서 동작하도록 통합.
 # ═══════════════════════════════════════════════════════════
 
-ENGINE_VERSION = "v2.2.0"
+ENGINE_VERSION = "v2.2.1"
 ENGINE_BUILD_DATE = "2026-08-04"
 
 
@@ -293,6 +337,9 @@ ENGINE_BUILD_DATE = "2026-08-04"
 # ═══════════════════════════════════════════════════════════
 
 _EXPR_DB_SCHEMA = 2
+
+# ★ v2.2.1 — 작품별 면제 문구 카운터 키 접두사 (prompt.py와 동일 값)
+from prompt import EXEMPT_PREFIX
 
 # 명사 후보 필터
 _NOUN_MIN_LEN = 2
@@ -326,6 +373,7 @@ _NOUN_STOPWORDS = frozenset({
     "하나", "없이", "없는", "있는", "하는", "되는", "그런", "이런",
     "저런", "가만히", "문득", "이윽고", "그대로", "제자리", "그쪽",
     "이쪽", "저쪽", "쪽으로", "그의", "그녀의", "자신", "서로를",
+    "센티", "센치", "밀리", "미터", "그램", "킬로", "정도", "가량",
 })
 
 # 용언 활용 어미 — 명사 후보에서 제외 (했다/졌다/봤다 계열 어간)
@@ -363,6 +411,54 @@ def _strip_josa(word: str) -> str:
         if word.endswith(josa) and (len(word) - len(josa)) >= _NOUN_MIN_LEN:
             return word[: -len(josa)]
     return word
+
+
+def _expand_name_tokens(names) -> set:
+    """★ v2.2.1 — 인물명 시드에서 제외 토큰을 확장한다.
+
+    백업 JSON의 _names에는 '강 상무', '친구 B'처럼 공백이 섞인 표기가 있다.
+    명사 카운터는 어절 단위로 세므로 통짜 문자열은 매칭되지 않는다.
+    어절로 쪼개 한글 조각(2~4자)까지 제외 집합에 넣는다.
+    """
+    out = set()
+    for raw in (names or []):
+        n = str(raw).strip()
+        if not n:
+            continue
+        out.add(n)
+        if ' ' in n:
+            for part in n.split():
+                part = part.strip()
+                if 2 <= len(part) <= 4 and all('가' <= ch <= '힣' for ch in part):
+                    out.add(part)
+    return out
+
+
+def _mask_exemptions(text: str, exemptions=None):
+    """★ v2.2.1 — 작품별 면제 문구를 본문에서 가려내고 따로 센다.
+
+    〈거래〉의 정산서 규격 '가로 8센티' 같은 표기는 플롯상 필수 물증이라
+    계량 패턴 상한 0에 걸리면 안 된다. 그렇다고 무제한 허용하면
+    '5센티' '3센티'가 다시 번식한다.
+    → 지정된 문구만 마스킹해 일반 계량 카운터에서 빼고,
+      '면제:{문구}' 이름으로 EP당 1회 상한을 따로 건다.
+
+    Returns:
+        (마스킹된 텍스트, {면제 키: 횟수})
+    """
+    counts = {}
+    if not text or not exemptions:
+        return text, counts
+    masked = text
+    for phrase in exemptions:
+        ph = str(phrase).strip()
+        if not ph:
+            continue
+        n = masked.count(ph)
+        if n:
+            counts[f"{EXEMPT_PREFIX}{ph}"] = n
+            masked = masked.replace(ph, "\u3007" * len(ph))
+    return masked, counts
 
 
 def _collect_body_lines(text: str):
@@ -457,12 +553,13 @@ def extract_signature_expressions(text: str, min_len: int = 18, max_len: int = 8
     return expressions
 
 
-def extract_expression_layers(text: str, exclude_names=None) -> dict:
+def extract_expression_layers(text: str, exclude_names=None, exemptions=None) -> dict:
     """★ v2.2.0 — 3층 추출. 문장 / 명사 / 구문 골격.
 
     Args:
         text: 비트 집필 결과 텍스트
         exclude_names: 명사 카운트에서 제외할 등장인물 이름 집합
+        exemptions: ★ v2.2.1 — 작품별 면제 문구 목록 (플롯 필수 계량 등)
 
     Returns:
         {
@@ -482,11 +579,14 @@ def extract_expression_layers(text: str, exclude_names=None) -> dict:
     result["names"] = names
     result["sentences"] = extract_signature_expressions(text)
 
-    excluded = set(exclude_names or set()) | names
+    excluded = _expand_name_tokens(exclude_names) | _expand_name_tokens(names)
 
     # ① 명사 층위 — 하드코딩 금지. 빈도 기반 동적 추출.
+    # ★ v2.2.1 — 면제 문구는 명사 카운트에서도 가린다.
+    #   '가로 8센티'를 허용해 놓고 '센티'가 명사로 쌓이면 앞뒤가 안 맞는다.
     noun_counts = {}
     for line in lines:
+        line, _ = _mask_exemptions(line, exemptions)
         for chunk in _re.findall(r'[가-힣]+', line):
             stem = _strip_josa(chunk)
             if not stem:
@@ -505,12 +605,14 @@ def extract_expression_layers(text: str, exclude_names=None) -> dict:
     result["nouns"] = {w: c for w, c in top_nouns}
 
     # ② 구문 골격 층위 — 문자열이 아니라 틀을 센다.
+    # ★ v2.2.1 — 면제 문구는 먼저 가려낸 뒤 별도 키로 집계한다.
     body_joined = '\n'.join(lines)
-    skel_counts = {}
+    body_masked, exempt_counts = _mask_exemptions(body_joined, exemptions)
+    skel_counts = dict(exempt_counts)
     for name, pattern in SKELETON_PATTERNS:
-        n = len(_re.findall(pattern, body_joined))
+        n = len(_re.findall(pattern, body_masked))
         if n:
-            skel_counts[name] = n
+            skel_counts[name] = skel_counts.get(name, 0) + n
     result["skeletons"] = skel_counts
 
     return result
@@ -555,7 +657,7 @@ def migrate_expression_db(db) -> dict:
 
 
 def update_season_expression_db(
-    db: dict, new_text: str, ep_num: int, beat_num: int,
+    db: dict, new_text: str, ep_num: int, beat_num: int, exemptions=None,
 ) -> dict:
     """시즌 표현 누적 DB 갱신.
 
@@ -573,7 +675,9 @@ def update_season_expression_db(
     db = migrate_expression_db(db)
 
     known_names = set(db.get("_names") or [])
-    layers = extract_expression_layers(new_text, exclude_names=known_names)
+    layers = extract_expression_layers(
+        new_text, exclude_names=known_names, exemptions=exemptions,
+    )
     known_names |= set(layers.get("names") or set())
     db["_names"] = sorted(known_names)
 
@@ -608,13 +712,16 @@ def update_season_expression_db(
     return db
 
 
-def rebuild_expression_db(episode_beats: dict) -> dict:
+def rebuild_expression_db(episode_beats: dict, exemptions=None, seed_names=None) -> dict:
     """★ v2.2.0 — episode_beats 전체를 다시 훑어 DB를 재구축.
 
     다시 쓰기(리라이트)로 기존 비트가 교체되면 증분 누적이 어긋난다.
     그럴 때는 전체 재계산이 가장 안전하다. 64비트 기준 1초 안쪽.
     """
     db = _empty_expression_db()
+    # ★ v2.2.1 — 백업 JSON에 시드된 고정 인물명은 재구축 후에도 유지한다.
+    if seed_names:
+        db["_names"] = sorted(set(seed_names))
     if not episode_beats:
         return db
 
@@ -632,7 +739,7 @@ def rebuild_expression_db(episode_beats: dict) -> dict:
             e_num, b_num = int(e_str), int(b_str)
         except Exception:
             continue
-        update_season_expression_db(db, text, e_num, b_num)
+        update_season_expression_db(db, text, e_num, b_num, exemptions=exemptions)
     return db
 
 
@@ -673,10 +780,7 @@ def get_overused_expressions(db, thresholds=None):
     for layer in ("sentences", "nouns", "skeletons"):
         source = db.get(layer) or {}
         if layer == "skeletons":
-            items = [
-                (k, c) for k, c in source.items()
-                if c > SKELETON_LIMITS.get(k, th["skeletons"])
-            ]
+            items = [(k, c) for k, c in source.items() if c > get_skeleton_limit(k)]
         else:
             items = [(k, c) for k, c in source.items() if c >= th[layer]]
         items.sort(key=lambda x: -x[1])
@@ -697,13 +801,14 @@ _VALIDATION_CHECKS = [
     ("C2", "엔진 메타 유출", r'(?:^|\n)\s*(?:비트\s*\d|Beat\s*\d|SCOPE|AI ESCAPE|Plant\s*[:：]|Payoff\s*[:：])', "error", 0),
     ("C3", "카메라 지시", r'탑다운|버즈아이|카메라가|카메라는|클로즈업으로|줌인|패닝', "warning", 0),
     ("C4", "계량 시간 표기", r'\d+(?:\.\d+)?\s*초(?![·가-힣])', "warning", 0),
+    ("C4b", "계량 치수 표기", r'\d+(?:\.\d+)?\s*(?:센티|센치|밀리)', "warning", 0),
     ("C5", "대구 구문 초과", r'아니다\.|아니라\s', "warning", 1),
     ("C6", "이중 씬번호", r'S#\d+\.\s*S#\d+', "error", 0),
     ("C7", "시간 표기 비표준", r'—\s*(?:아침|정오|한밤중|늦은 밤|이른 아침|해질녘|황혼)', "warning", 0),
 ]
 
 
-def validate_beat_output(text: str, ep_num: int, beat_num: int, db=None) -> dict:
+def validate_beat_output(text: str, ep_num: int, beat_num: int, db=None, exemptions=None) -> dict:
     """집필 결과에서 금지 패턴을 검출해 목록으로 돌려준다.
 
     Returns:
@@ -723,6 +828,11 @@ def validate_beat_output(text: str, ep_num: int, beat_num: int, db=None) -> dict
     idx = body.find('\n---\n')
     if idx > 0:
         body = body[:idx]
+
+    # ★ v2.2.1 — 작품별 면제 문구는 검사 대상에서 가린다.
+    # '가로 8센티' 같은 플롯 필수 계량이 C4에 걸려 매번 경고가 뜨면
+    # 경고 자체가 무의미해진다.
+    body, _exempt_hits = _mask_exemptions(body, exemptions)
 
     for cid, cname, pattern, severity, allowed in _VALIDATION_CHECKS:
         try:
@@ -757,9 +867,9 @@ def validate_beat_output(text: str, ep_num: int, beat_num: int, db=None) -> dict
 
         skel_bucket = bucket.get("skeletons") or {}
         for name, cnt in sorted(skel_bucket.items(), key=lambda x: -x[1]):
-            limit = SKELETON_LIMITS.get(name, EXPRESSION_LIMITS.get("skeletons", 3))
+            limit = get_skeleton_limit(name)
             if cnt > limit:
-                label = SKELETON_LABELS.get(name, name)
+                label = get_skeleton_label(name)
                 out["infos"].append((label, f"EP{ep_num} 누적 {cnt}회 — 상한 {limit} 초과"))
 
     return out
@@ -1597,6 +1707,8 @@ DEFAULTS = {
     "monitoring_feedback": "",  # v2.0.4 — 외부 모니터링 의견
     "showrunner_notes": "",     # v2.0.4 — 쇼러너 / 작가 노트
     "_beat_validation": {},     # ★ v2.2.0 — 마지막 비트 자동 검증 결과 (표시용)
+    "expression_exemptions": [],  # ★ v2.2.1 — 작품별 면제 문구 (플롯 필수 계량)
+    "docx_auto_scene_number": True,  # ★ v2.2.1 — DOCX 씬 번호 자동 재채번
 }
 
 for k, v in DEFAULTS.items():
@@ -1750,7 +1862,8 @@ def build_txt_download(text: str, filename: str):
 
 
 def build_docx_download(text: str, filename: str, title: str = "",
-                        include_beat_headers: bool = False):
+                        include_beat_headers: bool = False,
+                        auto_scene_number: bool = None):
     """v1.9 — Writer Engine 양식 빌더 호출 래퍼.
 
     기존 평문 빌더 자리를 한국 시나리오 표준 양식 빌더로 교체.
@@ -1775,6 +1888,12 @@ EPISODE N` 마커 포함)인지 단일 EP 텍스트인지 자동 판단해
         #   엔진 메타 줄(Series Engine vX · N비트)은 최종 모드 표지에서 자동 제외(make_series_docx_bytes 내).
         _include_cover = True
 
+        # ★ v2.2.1 — 씬 번호 자동 재채번 (미지정 시 세션 설정 사용)
+        _auto_num = (
+            st.session_state.get("docx_auto_scene_number", True)
+            if auto_scene_number is None else auto_scene_number
+        )
+
         # 시즌 전체 마커 감지
         if "\nEPISODE " in text and ("=" * 30) in text:
             data = make_series_docx_bytes(
@@ -1783,6 +1902,7 @@ EPISODE N` 마커 포함)인지 단일 EP 텍스트인지 자동 판단해
                 beats_done_count=_beats_count,
                 include_beat_headers=include_beat_headers,
                 include_cover=_include_cover,
+                auto_scene_number=_auto_num,
             )
         else:
             data = make_series_docx_bytes(
@@ -1791,6 +1911,7 @@ EPISODE N` 마커 포함)인지 단일 EP 텍스트인지 자동 판단해
                 beats_done_count=_beats_count,
                 include_beat_headers=include_beat_headers,
                 include_cover=_include_cover,
+                auto_scene_number=_auto_num,
             )
 
         st.download_button(
@@ -1910,6 +2031,7 @@ def make_series_docx_bytes(
     historical_type: str = "",
     include_beat_headers: bool = False,
     include_cover: bool = True,
+    auto_scene_number: bool = True,   # ★ v2.2.1
 ) -> bytes:
     """시리즈 시나리오 DOCX — 한국 표준 시나리오 서식.
 
@@ -2294,6 +2416,23 @@ def make_series_docx_bytes(
     # PROP 메모 / GENRE_*_CHECK 태그 strip
     text = _strip_prop_state_memos(text)
 
+    # ★ v2.2.1 — 씬 번호 자동 재채번
+    # 모델이 매긴 S# 번호는 비트가 독립 호출이라 종종 어긋난다.
+    # 최종 문서에서는 엔진이 에피소드 단위로 다시 센다.
+    # EPISODE N 마커를 만나면 1로 리셋된다.
+    _scene_counter = [0]
+
+    def _renumber_heading(line: str) -> str:
+        """헤딩에서 기존 S#번호를 떼고 엔진 채번으로 갈아끼운다."""
+        if not auto_scene_number:
+            return line
+        core = re.sub(r'^\s*S?#?\s*\d*\s*\.?\s*', '', line, count=1)
+        if not re.match(r'^(INT\.|EXT\.|INT\./EXT\.)', core, re.IGNORECASE):
+            # 예상 밖 형태면 원본 유지 (안전)
+            return line
+        _scene_counter[0] += 1
+        return f"S#{_scene_counter[0]}. {core.strip()}"
+
     # 정규식 패턴
     heading_re = re.compile(
         r'^S?#?\d*\.?\s*(INT\.|EXT\.|INT\./EXT\.)\s*(.+)',
@@ -2512,6 +2651,7 @@ def make_series_docx_bytes(
         if ep_marker_re.match(stripped):
             ep_match = ep_marker_re.match(stripped)
             ep_num = ep_match.group(1)
+            _scene_counter[0] = 0   # ★ v2.2.1 — 회별 S#1 리셋
             add_episode_heading(ep_num)
             prev_block_type = "ep"
             i += 1
@@ -2629,7 +2769,7 @@ def make_series_docx_bytes(
         # ── 씬 헤딩 ──
         m = heading_re.match(stripped)
         if m:
-            add_scene_heading(stripped)
+            add_scene_heading(_renumber_heading(stripped))
             prev_block_type = "scene"
             i += 1
             continue
@@ -3637,6 +3777,33 @@ if st.session_state["episode_plans"]:
         unsafe_allow_html=True,
     )
 
+    # ★ v2.2.1 — 작품별 표현 면제 문구
+    with st.expander("⚖️ 표현 면제 문구 (플롯 필수 계량·규격)", expanded=False):
+        st.caption(
+            "계량 표기는 기본적으로 차단됩니다. 그런데 작품에 따라 물증으로 "
+            "반드시 정확히 표기해야 하는 수치가 있습니다. 여기 등록한 문구는 "
+            "차단 대상에서 빠지고, 대신 **에피소드당 1회**만 허용됩니다. "
+            "두 번째부터는 '같은 규격'으로 받으라고 모델에게 지시합니다."
+        )
+        st.session_state.setdefault(
+            "expression_exemptions_input",
+            "\n".join(st.session_state.get("expression_exemptions") or []),
+        )
+        _exempt_text = st.text_area(
+            "면제 문구 (한 줄에 하나)",
+            height=110,
+            placeholder="가로 8센티\n세로 12센티\n120센티",
+            key="expression_exemptions_input",
+        )
+        st.session_state["expression_exemptions"] = [
+            _l.strip() for _l in (_exempt_text or "").split("\n") if _l.strip()
+        ]
+        if st.session_state["expression_exemptions"]:
+            st.caption(
+                f"등록 {len(st.session_state['expression_exemptions'])}건 · "
+                f"EP당 각 {EXEMPT_LIMIT_PER_EP}회 허용"
+            )
+
     # v1.7: 프로듀서 노트 (집필모드)
     with st.expander("🎬 프로듀서 노트 (집필 시 반영)", expanded=False):
         st.caption("여기에 입력한 노트가 모든 비트 집필에 자동 주입됩니다.")
@@ -3824,9 +3991,10 @@ if st.session_state["episode_plans"]:
                 st.session_state["episode_beats"][bk(selected_ep, next_beat)] = result
 
                 # ★ v2.0 — 시즌 표현 누적 DB 갱신
+                _exempt = st.session_state.get("expression_exemptions") or []
                 update_season_expression_db(
                     st.session_state["season_expression_db"],
-                    result, selected_ep, next_beat,
+                    result, selected_ep, next_beat, exemptions=_exempt,
                 )
 
                 # ★ v2.2.0 — 집필 직후 금지 패턴 자동 검증 (표시 전용, 차단 없음)
@@ -3837,6 +4005,7 @@ if st.session_state["episode_plans"]:
                     "result": validate_beat_output(
                         result, selected_ep, next_beat,
                         st.session_state["season_expression_db"],
+                        exemptions=_exempt,
                     ),
                 }
 
@@ -3885,8 +4054,12 @@ if st.session_state["episode_plans"]:
                 st.session_state["episode_beats"][bk(selected_ep, last_done)] = result
                 # ★ v2.2.0 — 비트가 교체되었으므로 표현 누적 DB를 전체 재계산.
                 # 증분 누적만 하면 옛 원고의 어휘가 DB에 남아 카운터가 어긋난다.
+                _exempt = st.session_state.get("expression_exemptions") or []
+                _seed_names = (st.session_state.get("season_expression_db") or {}).get("_names") or []
                 st.session_state["season_expression_db"] = rebuild_expression_db(
-                    st.session_state.get("episode_beats", {})
+                    st.session_state.get("episode_beats", {}),
+                    exemptions=_exempt,
+                    seed_names=_seed_names,
                 )
                 st.session_state["_beat_validation"] = {
                     "ep": selected_ep,
@@ -3894,6 +4067,7 @@ if st.session_state["episode_plans"]:
                     "result": validate_beat_output(
                         result, selected_ep, last_done,
                         st.session_state["season_expression_db"],
+                        exemptions=_exempt,
                     ),
                 }
                 st.rerun()
@@ -3969,6 +4143,21 @@ if has_any_beats:
     )
     _include_beats = "집필 모드" in _output_mode
 
+    # ★ v2.2.1 — 씬 번호 자동 재채번
+    st.session_state.setdefault(
+        "docx_auto_scene_number_input",
+        st.session_state.get("docx_auto_scene_number", True),
+    )
+    st.session_state["docx_auto_scene_number"] = st.checkbox(
+        "씬 번호 DOCX 자동 재채번",
+        key="docx_auto_scene_number_input",
+        help=(
+            "비트는 독립 호출로 집필되므로 모델이 매긴 S# 번호가 어긋날 수 있습니다. "
+            "이 옵션을 켜면 최종 문서에서 엔진이 에피소드 단위로 S#1부터 다시 채번합니다. "
+            "원고 본문의 번호는 무시되고 순서만 사용됩니다."
+        ),
+    )
+
     st.markdown('<div class="cl">에피소드별</div>', unsafe_allow_html=True)
     dl_cols = st.columns(min(ne, 4))
     for idx, ep in enumerate(range(1, ne + 1)):
@@ -4014,6 +4203,7 @@ _BACKUP_KEYS = [
     "season_expression_db",  # v2.0
     "monitoring_feedback",   # v2.0.4
     "showrunner_notes",      # v2.0.4
+    "expression_exemptions", # ★ v2.2.1 — 작품별 면제 문구
 ]
 
 
@@ -4088,6 +4278,13 @@ def _import_session_backup(raw_bytes: bytes) -> dict:
 
     if pending:
         st.session_state["_pending_widget_sync"] = pending
+
+    # ★ v2.2.1 — 면제 문구는 위젯 key로도 쓰이므로 pending 경유로 복원한다.
+    _exempt_restored = session_data.get("expression_exemptions") or []
+    if isinstance(_exempt_restored, list):
+        pending_now = st.session_state.get("_pending_widget_sync") or {}
+        pending_now["expression_exemptions_input"] = "\n".join(_exempt_restored)
+        st.session_state["_pending_widget_sync"] = pending_now
 
     # ★ v2.2.0 — 구버전 백업(v2.0/v2.1)의 평면 season_expression_db를
     # 층위 스키마로 승격. 문장 누적값은 보존되고 명사/골격 층은 비어서 시작한다.

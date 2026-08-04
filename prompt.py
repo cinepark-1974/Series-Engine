@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────
-# BLUE JEANS SERIES ENGINE v2.2.0
+# BLUE JEANS SERIES ENGINE v2.2.1
 # prompt.py — Full Version (Creator Engine v1.9 + Writer Engine v2.2 동기화)
 # © 2026 BLUE JEANS PICTURES
 #
@@ -48,6 +48,33 @@ SKELETON_LIMITS = {
     "서술_규칙적": 2,
     "대명_무언가": 3,
 }
+
+# ★ v2.2.1 — 작품별 면제 문구 카운터 키 접두사.
+# main.py의 EXEMPT_PREFIX와 같은 값이어야 한다 (여기가 단일 소스).
+EXEMPT_PREFIX = "면제:"
+
+# 면제 문구는 EP당 1회만 허용한다 (최초 1회 정확히 표기 → 이후 '같은 규격'으로 받는다)
+EXEMPT_LIMIT_PER_EP = 1
+
+
+def get_skeleton_limit(name: str) -> int:
+    """골격 키 하나의 EP 단위 상한을 돌려준다.
+
+    면제 문구('면제:가로 8센티')는 SKELETON_LIMITS에 없으므로
+    EXEMPT_LIMIT_PER_EP를 쓴다.
+    """
+    if str(name).startswith(EXEMPT_PREFIX):
+        return EXEMPT_LIMIT_PER_EP
+    return SKELETON_LIMITS.get(name, EXPRESSION_LIMITS.get("skeletons", 3))
+
+
+def get_skeleton_label(name: str) -> str:
+    """골격 키를 사람이 읽는 라벨로 바꾼다."""
+    key = str(name)
+    if key.startswith(EXEMPT_PREFIX):
+        return f"'{key[len(EXEMPT_PREFIX):]}' (플롯 필수 계량)"
+    return SKELETON_LABELS.get(key, key)
+
 
 # 프롬프트 노출용 사람이 읽는 라벨
 SKELETON_LABELS = {
@@ -102,14 +129,30 @@ def build_expression_counter_block(season_expression_db: dict, ep_num: int) -> s
     # 구문 골격 — 상한 0인 항목은 사용 여부와 무관하게 항상 노출
     skel_lines = []
     for name, _pat in SKELETON_PATTERNS:
-        limit = SKELETON_LIMITS.get(name, EXPRESSION_LIMITS.get("skeletons", 3))
+        limit = get_skeleton_limit(name)
         used = int(ep_skels.get(name, 0) or 0)
-        label = SKELETON_LABELS.get(name, name)
+        label = get_skeleton_label(name)
         if limit == 0:
             skel_lines.append(f"  · {label} {used}회 — 사용 금지")
         elif used >= max(1, limit - 1):
             skel_lines.append(f"  · {label} {used}회 (상한 {limit})")
     lines.extend(skel_lines)
+
+    # ★ v2.2.1 — 작품별 면제 문구 (플롯 필수 계량). EP당 1회.
+    exempt_lines = []
+    for key, cnt in sorted(ep_skels.items()):
+        if not str(key).startswith(EXEMPT_PREFIX):
+            continue
+        used = int(cnt or 0)
+        label = get_skeleton_label(key)
+        if used >= EXEMPT_LIMIT_PER_EP:
+            exempt_lines.append(
+                f"  · {label} {used}회 — EP당 1회 소진. "
+                f"이후에는 '같은 규격' '같은 크기'로 받아라."
+            )
+        else:
+            exempt_lines.append(f"  · {label} {used}회 (EP당 1회 허용)")
+    lines.extend(exempt_lines)
 
     if not lines:
         return ""
@@ -118,7 +161,9 @@ def build_expression_counter_block(season_expression_db: dict, ep_num: int) -> s
         f"\n[⚠️ v2.2 — EP{ep_num}에서 지금까지 사용된 횟수 (엔진 실측치)]\n"
         + "\n".join(lines)
         + "\n→ 위 수치는 추정이 아니라 앞 비트 원고를 기계로 센 값이다.\n"
-        "→ 상한에 도달했거나 근접한 항목은 이번 비트에서 쓰지 마라. 다른 표현으로 대체하라.\n"
+        "→ 상한에 도달한 항목은 그 이미지를 아예 쓰지 마라.\n"
+        "→ 유의어로 바꾸는 것은 회피다. '서랍'이 막혔다고 '수납장'으로 쓰지 마라.\n"
+        "   그 물건을 등장시키지 말고 다른 행동으로 같은 목적을 달성하라.\n"
         "→ '사용 금지' 항목은 0회를 유지하라. 시간의 길이는 초 단위 숫자가 아니라\n"
         "   행동과 침묵의 길이로 보여준다.\n"
     )
