@@ -1,11 +1,127 @@
 # ─────────────────────────────────────────────────────────────
-# BLUE JEANS SERIES ENGINE v2.0.8
+# BLUE JEANS SERIES ENGINE v2.2.0
 # prompt.py — Full Version (Creator Engine v1.9 + Writer Engine v2.2 동기화)
 # © 2026 BLUE JEANS PICTURES
 #
 # NOTE: 엔진 버전 상수(ENGINE_VERSION / ENGINE_BUILD_DATE)는 main.py에서 단일 관리한다.
 #       prompt.py 안에서 버전 문자열을 따로 두지 않는다 (이중 관리 방지).
 # ─────────────────────────────────────────────────────────────
+
+
+# ═══════════════════════════════════════════════════════════
+# ★ v2.2.0 — 표현 누적 차단 공용 상수 (main.py와 단일 소스 공유)
+# main.py의 추출기(extract_expression_layers)와 prompt.py의 주입부가
+# 같은 패턴·같은 상한을 쓰도록 여기 한 곳에서만 정의한다.
+# ═══════════════════════════════════════════════════════════
+
+# 층위별 기본 상한
+#   sentences — 시즌 누적 기준 (같은 문장 N회 이상 누적 시 차단)
+#   nouns     — EP 단위 기준 (한 에피소드 안에서 같은 명사 N회 초과 금지)
+#   skeletons — EP 단위 기준 (구문 골격별 개별 상한은 SKELETON_LIMITS)
+EXPRESSION_LIMITS = {
+    "sentences": 3,
+    "nouns": 12,
+    "skeletons": 3,
+}
+
+# 구문 골격 패턴 — 문자열이 아니라 '골격'을 센다.
+# 문장이 매번 달라도 같은 틀을 반복하면 여기서 잡힌다.
+SKELETON_PATTERNS = [
+    ("대구_부정긍정", r"(?:이|가|은|는)?\s*아니다\.\s*|(?:이|가)?\s*아니라\s+"),
+    ("계량_초",       r"\d+(?:\.\d+)?\s*초(?![·가-힣])"),
+    ("계량_센티",     r"\d+(?:\.\d+)?\s*(?:센티|밀리|센치)"),
+    ("부사_미세하게", r"미세하게"),
+    ("부사_천천히",   r"천천히"),
+    ("부사_조용히",   r"조용히"),
+    ("서술_규칙적",   r"규칙적이"),
+    ("대명_무언가",   r"무언가"),
+]
+
+# 골격별 EP 단위 상한. 0 = 완전 금지.
+SKELETON_LIMITS = {
+    "대구_부정긍정": 3,
+    "계량_초": 0,
+    "계량_센티": 0,
+    "부사_미세하게": 2,
+    "부사_천천히": 3,
+    "부사_조용히": 3,
+    "서술_규칙적": 2,
+    "대명_무언가": 3,
+}
+
+# 프롬프트 노출용 사람이 읽는 라벨
+SKELETON_LABELS = {
+    "대구_부정긍정": "'X가 아니다. Y다' 대구 구문",
+    "계량_초": "'N초' 계량 표기",
+    "계량_센티": "'N센티' 계량 표기",
+    "부사_미세하게": "부사 '미세하게'",
+    "부사_천천히": "부사 '천천히'",
+    "부사_조용히": "부사 '조용히'",
+    "서술_규칙적": "서술 '규칙적이다'",
+    "대명_무언가": "대명 '무언가'",
+}
+
+
+def build_expression_counter_block(season_expression_db: dict, ep_num: int) -> str:
+    """★ v2.2.0 — 비트 간 누적 카운터 블록 생성.
+
+    모델은 앞 비트에서 어떤 어휘를 몇 번 썼는지 셀 수 없다.
+    세라고 시키는 대신 '이미 몇 번 썼는지'를 숫자로 알려준다.
+    차단이 아니라 정보 제공이므로 문체 부작용이 적다.
+
+    Args:
+        season_expression_db: v2.2 스키마 dict
+            {'sentences':{}, 'nouns':{}, 'skeletons':{}, 'per_episode':{...}}
+        ep_num: 현재 집필 중인 EP 번호
+
+    Returns:
+        프롬프트에 주입할 문자열. 데이터가 없으면 빈 문자열.
+    """
+    if not isinstance(season_expression_db, dict):
+        return ""
+
+    per_ep = season_expression_db.get("per_episode") or {}
+    bucket = per_ep.get(str(ep_num)) or per_ep.get(ep_num) or {}
+    ep_nouns = bucket.get("nouns") or {}
+    ep_skels = bucket.get("skeletons") or {}
+
+    noun_limit = EXPRESSION_LIMITS.get("nouns", 12)
+
+    lines = []
+
+    # 명사 — 상한 대비 50% 이상 소진된 것만 노출 (노이즈 억제)
+    hot_nouns = [
+        (w, c) for w, c in ep_nouns.items()
+        if c >= max(3, noun_limit // 2)
+    ]
+    hot_nouns.sort(key=lambda x: -x[1])
+    if hot_nouns:
+        parts = [f"{w} {c}회 (상한 {noun_limit})" for w, c in hot_nouns[:12]]
+        lines.append("  · " + " / ".join(parts))
+
+    # 구문 골격 — 상한 0인 항목은 사용 여부와 무관하게 항상 노출
+    skel_lines = []
+    for name, _pat in SKELETON_PATTERNS:
+        limit = SKELETON_LIMITS.get(name, EXPRESSION_LIMITS.get("skeletons", 3))
+        used = int(ep_skels.get(name, 0) or 0)
+        label = SKELETON_LABELS.get(name, name)
+        if limit == 0:
+            skel_lines.append(f"  · {label} {used}회 — 사용 금지")
+        elif used >= max(1, limit - 1):
+            skel_lines.append(f"  · {label} {used}회 (상한 {limit})")
+    lines.extend(skel_lines)
+
+    if not lines:
+        return ""
+
+    return (
+        f"\n[⚠️ v2.2 — EP{ep_num}에서 지금까지 사용된 횟수 (엔진 실측치)]\n"
+        + "\n".join(lines)
+        + "\n→ 위 수치는 추정이 아니라 앞 비트 원고를 기계로 센 값이다.\n"
+        "→ 상한에 도달했거나 근접한 항목은 이번 비트에서 쓰지 마라. 다른 표현으로 대체하라.\n"
+        "→ '사용 금지' 항목은 0회를 유지하라. 시간의 길이는 초 단위 숫자가 아니라\n"
+        "   행동과 침묵의 길이로 보여준다.\n"
+    )
 
 
 # ═══════════════════════════════════════════════════════════
@@ -2896,14 +3012,26 @@ def build_write_episode_beat_prompt(
     if prev_beat_structure_type:
         structure_type_block = f"\n[⚡ 비트 구조 변주 — 직전: [{prev_beat_structure_type}] → 다른 유형 선택]\n6유형: [INV] [CON] [REV] [EMO] [ACT] [SIL]\n"
 
-    # ★ v2.0 — 시즌 표현 누적 DB 차단
-    # 비트 집필 후 자동 추출된 표현이 시즌 안에서 3회 이상 누적되면 사용 금지.
+    # ★ v2.0 — 시즌 표현 누적 DB 차단 (문장 층위)
+    # ★ v2.2.0 — 스키마 2층 대응 + 명사/구문 골격 카운터 블록 추가.
+    #   구버전(평면 {문장: 횟수})과 신버전(층위 dict) 모두 받는다.
     expression_block = ""
-    if season_expression_db:
-        # season_expression_db: { "표현 텍스트": 누적 횟수, ... }
+    _sent_db = {}
+    if isinstance(season_expression_db, dict) and season_expression_db:
+        if isinstance(season_expression_db.get("sentences"), dict):
+            _sent_db = season_expression_db.get("sentences") or {}
+        else:
+            # 구버전 평면 스키마 — 값이 int인 항목만 문장으로 간주
+            _sent_db = {
+                k: v for k, v in season_expression_db.items()
+                if isinstance(v, int)
+            }
+
+    if _sent_db:
+        _sent_limit = EXPRESSION_LIMITS.get("sentences", 3)
         overused = [
-            (expr, count) for expr, count in season_expression_db.items()
-            if count >= 3
+            (expr, count) for expr, count in _sent_db.items()
+            if count >= _sent_limit
         ]
         if overused:
             overused.sort(key=lambda x: -x[1])
@@ -2918,6 +3046,9 @@ def build_write_episode_beat_prompt(
                 "→ 캐릭터 시그니처 행동이라도 매번 같은 문장으로 반복하지 마라.\n"
                 "→ 모티프 변주 원칙: 같은 의미·다른 표현. 같은 행동·다른 각도.\n"
             )
+
+    # ★ v2.2.0 — 비트 간 누적 카운터 (명사 / 구문 골격) 실측치 주입
+    expression_block += build_expression_counter_block(season_expression_db, ep_num)
 
     # ★ v2.0 — 회별 사건/시즌 비중 룰
     focus_block = get_episode_focus_block(ep_num, num_episodes)

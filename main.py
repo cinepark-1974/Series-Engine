@@ -1,5 +1,5 @@
 """
-👖 BLUE JEANS SERIES ENGINE v2.1.2 — main.py
+👖 BLUE JEANS SERIES ENGINE v2.2.0 — main.py
 시즌 아크 → 에피소드 씬 플랜 → 비트 집필 파이프라인
 © 2026 BLUE JEANS PICTURES
 
@@ -188,6 +188,43 @@
     · 효과: 에피소드별 최종본도 표지 유지. 시즌 전체 최종본은 시즌 표지
             1장만. 표지와 비트 헤더의 제어축이 분리되어 '표지 있는 최종본'
             조합이 가능해짐.
+
+★ v2.2.0 (2026-08-04) — 표현 누적 차단 3층 확장
+  [패치 R] 추출 층위 하강 — 명사 · 구문 골격 · 계량 표기까지
+    · 원인: v2.0 extract_signature_expressions는 18자 이상 '문장'만
+            추출했다. 실제 반복 단위는 그보다 훨씬 짧다.
+            〈거래〉 계열 64비트 실측: '서랍' 1042회, '수첩' 466회,
+            'X가 아니다. Y다' 골격 217회, 'N초' 계량 표기 444회.
+            전부 문장 층위 그물을 통과했다. EP7의 'N초'가 80회로
+            시즌 최대치 — 뒤로 갈수록 악화되는 곡선.
+    · 수정:
+            (1) _collect_body_lines 공용 전처리 분리 (기존 동작 보존).
+            (2) extract_expression_layers 신설 — 문장/명사/골격 3층 반환.
+                명사는 조사 제거 후 어간 빈도. 형태소 분석기 미도입.
+                등장인물 이름은 대사 화자·첫 등장 표기에서 자동 수집해
+                명사 카운트에서 제외.
+            (3) SKELETON_PATTERNS 8종 — 문자열이 아니라 골격을 센다.
+            (4) extract_signature_expressions 반환값은 불변 (회귀 없음).
+
+  [패치 S] 비트 간 누적 카운터를 집필 프롬프트에 실측 주입
+    · 원인: 비트는 독립 호출로 집필된다. 모델은 앞 비트에서 특정
+            어휘를 몇 번 썼는지 알 수 없다. 프롬프트에 "12회 이하"를
+            문자로 적는 것은 세라고 시키는 것이지 세어주는 것이 아니다.
+    · 수정:
+            (1) season_expression_db 스키마 2층화 —
+                {'sentences','nouns','skeletons','per_episode','_names'}.
+            (2) per_episode 카운터 신설. Beat 0에서 리셋, 시즌 누적은 유지.
+            (3) prompt.build_expression_counter_block — EP 단위 실측치를
+                "서랍 9회 (상한 12)" 형태로 주입.
+            (4) 구버전 평면 백업 JSON은 migrate_expression_db로 자동 승격.
+
+  [패치 T] 집필 직후 금지 패턴 자동 검증 (표시 전용)
+    · 수정: validate_beat_output 신설. C1 비트 헤더 유출 / C2 엔진 메타
+            유출 / C3 카메라 지시 / C4 계량 시간 표기 / C5 대구 구문 초과 /
+            C6 이중 씬번호 / C7 시간 표기 비표준 / C8 누적 상한 도달.
+    · 원칙: 차단하지 않는다. 자동 치환·자동 재생성도 하지 않는다.
+            검출 결과만 보여주고 재생성 여부는 작가가 판단한다.
+    · 리라이트 시 rebuild_expression_db로 DB 전체 재계산 (카운터 정합).
 """
 
 import streamlit as st
@@ -223,6 +260,11 @@ from prompt import (
     sanitize_json_string,
     build_adaptive_context,
     JSON_OUTPUT_RULES,
+    # ★ v2.2.0 — 표현 누적 차단 공용 상수 (prompt.py 단일 소스)
+    EXPRESSION_LIMITS,
+    SKELETON_PATTERNS,
+    SKELETON_LIMITS,
+    SKELETON_LABELS,
 )
 
 # ═══════════════════════════════════════════════════════════
@@ -232,31 +274,109 @@ from prompt import (
 # Series Engine 컨텍스트에서 동작하도록 통합.
 # ═══════════════════════════════════════════════════════════
 
-ENGINE_VERSION = "v2.1.9"
-ENGINE_BUILD_DATE = "2026-05-23"
+ENGINE_VERSION = "v2.2.0"
+ENGINE_BUILD_DATE = "2026-08-04"
 
 
 # ═══════════════════════════════════════════════════════════
 # ★ v2.0 — 시즌 표현 누적 시스템
-# 비트 집필 후 핵심 표현(20자 이상 연속 문장)을 자동 추출해
-# 시즌 단위 누적 DB로 관리. 다음 비트 집필 시 3회 이상 누적된
-# 표현은 모델에게 명시적 금지 지시.
-# 정량 보고서 "AI Escape A17 위반 147건" 해결책.
+# ★ v2.2.0 — 3층 확장 (문장 / 명사 / 구문 골격)
+#
+# v2.0은 18자 이상 '문장'만 추출했다. 그런데 실제로 반복되는 단위는
+# 그보다 훨씬 짧다 — '서랍'(2자), '0.3초'(4자), 'X가 아니다. Y다'(골격).
+# 문장 층위만 보면 이 셋이 전부 그물을 빠져나간다.
+# v2.2.0은 추출 층위를 명사·계량 표기·구문 골격까지 내린다.
+#
+# 추가로, 모델은 앞 비트에서 특정 어휘를 몇 번 썼는지 셀 수 없다.
+# 프롬프트에 "12회 이하로 써라"라고 적는 것은 세라고 시키는 것이지
+# 세어주는 것이 아니다. v2.2.0은 코드가 세서 숫자로 알려준다.
 # ═══════════════════════════════════════════════════════════
 
-def extract_signature_expressions(text: str, min_len: int = 18, max_len: int = 80) -> list:
-    """비트 집필 결과 텍스트에서 시그니처 표현을 추출.
+_EXPR_DB_SCHEMA = 2
 
-    추출 대상:
-    - 18자 이상 80자 이하의 문장 (한 문장 단위)
-    - 시나리오 본문(지문/대사)만 — 메타·헤더·구분선 제외
+# 명사 후보 필터
+_NOUN_MIN_LEN = 2
+_NOUN_MAX_LEN = 4
+_NOUN_TOP_N_PER_BEAT = 40  # 비트당 DB에 등록할 상위 명사 개수
+
+# 조사 — 긴 것부터 검사한다 (어절 끝에서 벗겨낸다)
+_JOSA_SUFFIXES = (
+    "으로서", "으로써", "에서는", "에게서", "이라고", "에게는", "에서도",
+    "라고", "에서", "에게", "으로", "께서", "부터", "까지", "마다",
+    "조차", "밖에", "처럼", "보다", "한테", "이라", "로서", "로써",
+    "들이", "들을", "들은", "들의", "들에", "이나", "이란", "이든",
+    "만큼", "이랑", "에는", "에도", "에만", "과의", "와의", "의",
+    "이", "가", "을", "를", "은", "는", "에", "와", "과", "도",
+    "만", "로", "랑", "께", "라", "야",
+)
+
+# 명사로 등록하지 않을 어절 (대명사·부사·접속사·기능어·시나리오 상용어)
+_NOUN_STOPWORDS = frozenset({
+    "그는", "그녀", "그들", "우리", "저기", "여기", "거기", "누구", "무엇",
+    "이것", "그것", "저것", "이때", "그때", "다시", "잠시", "이제", "아직",
+    "다만", "그리", "조금", "매우", "너무", "정말", "역시", "결국", "이미",
+    "가만", "천천", "조용", "가볍", "무겁", "그대", "잠깐", "동안", "순간",
+    "쪽으", "안으", "밖으", "위로", "아래", "사이", "앞에", "뒤에", "옆에",
+    "천천히", "조용히", "무언가", "미세하게", "그러나", "하지만", "그리고",
+    "그래서", "그러다", "그러자", "그러면", "그런데", "이렇게", "저렇게",
+    "그렇게", "어떻게", "얼마나", "함께", "서로", "혼자", "모두", "전부",
+    "채로", "듯이", "만큼", "때문", "대로", "동시", "한번", "다음", "마지",
+    "여전", "이내", "곧바", "그제", "말없", "아무", "어느", "각자",
+    "이건", "이게", "그건", "그게", "저건", "저게", "위에", "아니",
+    "하나", "없이", "없는", "있는", "하는", "되는", "그런", "이런",
+    "저런", "가만히", "문득", "이윽고", "그대로", "제자리", "그쪽",
+    "이쪽", "저쪽", "쪽으로", "그의", "그녀의", "자신", "서로를",
+})
+
+# 용언 활용 어미 — 명사 후보에서 제외 (했다/졌다/봤다 계열 어간)
+_VERB_TAIL = ("다", "요", "까", "지", "네", "군", "져", "졌", "했", "됐",
+              "혔", "겼", "왔", "갔", "봤", "줬", "랐", "났", "텄", "섰",
+              "쳤", "쉈", "폈", "켰")
+
+# 구문 골격 패턴 / 상한 / 라벨은 prompt.py에서 단일 관리 (import)
+
+
+# 한 글자 조사 — 2음절 어절 끝에 붙으면 어간이 1음절이 되어 의미가 없다.
+_SINGLE_JOSA = ("이", "가", "을", "를", "은", "는", "에", "의", "도", "만", "로", "와", "과")
+
+# 위 조사 글자로 끝나지만 그 자체가 명사인 2음절 어휘 — 예외 보존
+_TWO_CHAR_KEEP = frozenset({
+    "종이", "사이", "아이", "나이", "차이", "회의", "합의", "동의", "문의",
+    "고의", "성의", "호의", "주의", "노의", "장의", "명의", "정의", "의의",
+    "기와", "지도", "인도", "보도", "복도", "수도", "제도", "태도", "각도",
+})
+
+
+def _strip_josa(word: str) -> str:
+    """어절 끝의 조사를 한 겹 벗겨 어간을 남긴다.
+
+    형태소 분석기를 쓰지 않는다 (Streamlit Cloud 의존성 최소화).
+    '서랍을' → '서랍', '수첩에서' → '수첩' 수준의 근사면 충분하다.
+    """
+    if len(word) <= _NOUN_MIN_LEN:
+        # '손이' '물이' 같은 2음절 어절은 조사를 떼면 1음절만 남는다.
+        # 실제 명사('종이' '사이')가 아니면 카운트에서 제외한다.
+        if len(word) == 2 and word[-1] in _SINGLE_JOSA and word not in _TWO_CHAR_KEEP:
+            return ""
+        return word
+    for josa in _JOSA_SUFFIXES:
+        if word.endswith(josa) and (len(word) - len(josa)) >= _NOUN_MIN_LEN:
+            return word[: -len(josa)]
+    return word
+
+
+def _collect_body_lines(text: str):
+    """비트 텍스트에서 시나리오 본문 라인만 골라낸다.
+
+    v2.0 extract_signature_expressions의 전처리를 공용 헬퍼로 분리한 것.
+    동작은 그대로다 (회귀 없음).
 
     Returns:
-        list[str] — 정규화된 표현 목록 (중복 제거)
+        (lines, names) — 본문 라인 목록, 감지된 등장인물 이름 집합
     """
     import re as _re
     if not text:
-        return []
+        return [], set()
 
     # 메타 영역 잘라내기 — '---' 또는 '═══' 이후는 메모
     body = text
@@ -265,8 +385,13 @@ def extract_signature_expressions(text: str, min_len: int = 18, max_len: int = 8
         if idx > 0:
             body = body[:idx]
 
-    # 줄 단위로 분리 후 메타·헤더 라인 제외
     lines = []
+    names = set()
+
+    # 인물 첫 등장 표기 '이름(30대, 남)' → 이름 수집
+    for m in _re.finditer(r'([가-힣]{2,4})\s*\(\s*\d+\s*대', body):
+        names.add(m.group(1))
+
     for raw_line in body.split('\n'):
         line = raw_line.strip()
         if not line:
@@ -280,11 +405,36 @@ def extract_signature_expressions(text: str, min_len: int = 18, max_len: int = 8
         # 메타 prefix 제외 (간이판)
         if _re.match(r'^[\-•·*⭐★□]\s*(\*\*)?(서사동력|관객 심리|빌런|비밀|장르|본질|SCOPE|AI ESCAPE|fun_engine|absolute_goal|emotion_triggers|Plant|Payoff|핵심|모티프|맥거핀|보이스|액션 아이디어|비트)', line):
             continue
-        # 캐릭터 + \t\t + 대사 형식 → 대사 부분만 추출
+        # 캐릭터 + \t\t + 대사 형식 → 대사 부분만 추출 (화자명은 이름으로 수집)
         m_dialogue = _re.match(r'^([가-힣]{1,5})\s*\t+(.+)$', line)
         if m_dialogue:
+            speaker = m_dialogue.group(1).strip()
+            if len(speaker) >= 2:
+                names.add(speaker)
             line = m_dialogue.group(2).strip()
         lines.append(line)
+
+    return lines, names
+
+
+def extract_signature_expressions(text: str, min_len: int = 18, max_len: int = 80) -> list:
+    """비트 집필 결과 텍스트에서 시그니처 표현(문장)을 추출.
+
+    ★ v2.2.0 — 전처리를 _collect_body_lines로 분리했을 뿐,
+       반환값과 동작은 v2.0/v2.1과 완전히 동일하다 (회귀 없음).
+
+    추출 대상:
+    - 18자 이상 80자 이하의 문장 (한 문장 단위)
+    - 시나리오 본문(지문/대사)만 — 메타·헤더·구분선 제외
+
+    Returns:
+        list[str] — 정규화된 표현 목록 (중복 제거)
+    """
+    import re as _re
+    if not text:
+        return []
+
+    lines, _names = _collect_body_lines(text)
 
     # 문장 단위 분리 (마침표·물음표·느낌표 뒤)
     text_joined = ' '.join(lines)
@@ -307,38 +457,312 @@ def extract_signature_expressions(text: str, min_len: int = 18, max_len: int = 8
     return expressions
 
 
+def extract_expression_layers(text: str, exclude_names=None) -> dict:
+    """★ v2.2.0 — 3층 추출. 문장 / 명사 / 구문 골격.
+
+    Args:
+        text: 비트 집필 결과 텍스트
+        exclude_names: 명사 카운트에서 제외할 등장인물 이름 집합
+
+    Returns:
+        {
+          'sentences': list[str],       # 기존 반환값과 동일
+          'nouns': dict[str, int],      # 어간별 출현 횟수
+          'skeletons': dict[str, int],  # 골격 이름별 출현 횟수
+          'names': set[str],            # 이 텍스트에서 감지된 인물 이름
+        }
+    """
+    import re as _re
+
+    result = {"sentences": [], "nouns": {}, "skeletons": {}, "names": set()}
+    if not text:
+        return result
+
+    lines, names = _collect_body_lines(text)
+    result["names"] = names
+    result["sentences"] = extract_signature_expressions(text)
+
+    excluded = set(exclude_names or set()) | names
+
+    # ① 명사 층위 — 하드코딩 금지. 빈도 기반 동적 추출.
+    noun_counts = {}
+    for line in lines:
+        for chunk in _re.findall(r'[가-힣]+', line):
+            stem = _strip_josa(chunk)
+            if not stem:
+                continue
+            if not (_NOUN_MIN_LEN <= len(stem) <= _NOUN_MAX_LEN):
+                continue
+            # 용언 활용형 제외 (한다/했다/있다/본다/펼쳐져 …)
+            if stem.endswith(_VERB_TAIL):
+                continue
+            if stem in _NOUN_STOPWORDS or stem in excluded:
+                continue
+            noun_counts[stem] = noun_counts.get(stem, 0) + 1
+
+    # 상위 N개만 등록 (DB 비대화 방지)
+    top_nouns = sorted(noun_counts.items(), key=lambda x: -x[1])[:_NOUN_TOP_N_PER_BEAT]
+    result["nouns"] = {w: c for w, c in top_nouns}
+
+    # ② 구문 골격 층위 — 문자열이 아니라 틀을 센다.
+    body_joined = '\n'.join(lines)
+    skel_counts = {}
+    for name, pattern in SKELETON_PATTERNS:
+        n = len(_re.findall(pattern, body_joined))
+        if n:
+            skel_counts[name] = n
+    result["skeletons"] = skel_counts
+
+    return result
+
+
+def _empty_expression_db() -> dict:
+    return {
+        "_schema": _EXPR_DB_SCHEMA,
+        "sentences": {},
+        "nouns": {},
+        "skeletons": {},
+        "per_episode": {},
+        "_names": [],
+    }
+
+
+def migrate_expression_db(db) -> dict:
+    """★ v2.2.0 — 구버전 평면 스키마 → 층위 스키마 하위호환 변환.
+
+    v2.0/v2.1 백업 JSON의 season_expression_db는 { "문장": 횟수 } 평면 dict다.
+    이 값을 'sentences'로 옮기고 나머지 층은 빈 값으로 시작한다.
+    입력 dict 객체를 그대로 mutate 한다 (session_state 참조 유지).
+    """
+    if not isinstance(db, dict):
+        return _empty_expression_db()
+
+    # 이미 신 스키마
+    if isinstance(db.get("sentences"), dict):
+        db.setdefault("_schema", _EXPR_DB_SCHEMA)
+        db.setdefault("nouns", {})
+        db.setdefault("skeletons", {})
+        db.setdefault("per_episode", {})
+        db.setdefault("_names", [])
+        return db
+
+    # 구 스키마 (평면) — 값이 int인 항목만 문장으로 인정
+    flat = {k: v for k, v in db.items() if isinstance(v, int) and not str(k).startswith("_")}
+    db.clear()
+    db.update(_empty_expression_db())
+    db["sentences"] = flat
+    return db
+
+
 def update_season_expression_db(
     db: dict, new_text: str, ep_num: int, beat_num: int,
 ) -> dict:
     """시즌 표현 누적 DB 갱신.
 
+    ★ v2.2.0 — 3층 누적 + EP 단위 카운터 병행.
+
     Args:
-        db: 현재 누적 DB. { 표현 텍스트: 누적 횟수 }
+        db: 현재 누적 DB (v2.2 층위 스키마 / 구버전 평면 스키마 모두 허용)
         new_text: 방금 집필 완료된 비트 텍스트
-        ep_num: EP 번호 (디버깅 용)
-        beat_num: Beat 번호 (디버깅 용)
+        ep_num: EP 번호
+        beat_num: Beat 번호 (0이면 해당 EP 카운터 리셋)
 
     Returns:
         갱신된 DB (입력 db 객체를 그대로 mutate 후 반환)
     """
-    if db is None:
-        db = {}
-    expressions = extract_signature_expressions(new_text)
-    for expr in expressions:
+    db = migrate_expression_db(db)
+
+    known_names = set(db.get("_names") or [])
+    layers = extract_expression_layers(new_text, exclude_names=known_names)
+    known_names |= set(layers.get("names") or set())
+    db["_names"] = sorted(known_names)
+
+    ep_key = str(ep_num)
+    per_ep = db.setdefault("per_episode", {})
+    # Beat 0 = 새 에피소드 시작 → EP 단위 카운터 리셋 (시즌 누적은 유지)
+    if beat_num == 0 or ep_key not in per_ep:
+        per_ep[ep_key] = {"sentences": {}, "nouns": {}, "skeletons": {}}
+    bucket = per_ep[ep_key]
+    bucket.setdefault("sentences", {})
+    bucket.setdefault("nouns", {})
+    bucket.setdefault("skeletons", {})
+
+    # ① 문장 — 비트당 1회 (기존 v2.0 동작 유지)
+    for expr in layers.get("sentences", []):
         norm = expr.strip().rstrip('.!?').strip()
         if not norm:
             continue
-        db[norm] = db.get(norm, 0) + 1
+        db["sentences"][norm] = db["sentences"].get(norm, 0) + 1
+        bucket["sentences"][norm] = bucket["sentences"].get(norm, 0) + 1
+
+    # ② 명사 — 실제 출현 횟수만큼 누적
+    for word, cnt in (layers.get("nouns") or {}).items():
+        db["nouns"][word] = db["nouns"].get(word, 0) + cnt
+        bucket["nouns"][word] = bucket["nouns"].get(word, 0) + cnt
+
+    # ③ 구문 골격 — 실제 출현 횟수만큼 누적
+    for name, cnt in (layers.get("skeletons") or {}).items():
+        db["skeletons"][name] = db["skeletons"].get(name, 0) + cnt
+        bucket["skeletons"][name] = bucket["skeletons"].get(name, 0) + cnt
+
     return db
 
 
-def get_overused_expressions(db: dict, threshold: int = 3) -> list:
-    """누적 N회 이상인 표현 목록 반환 (높은 순)."""
-    if not db:
-        return []
-    items = [(e, c) for e, c in db.items() if c >= threshold]
-    items.sort(key=lambda x: -x[1])
-    return items
+def rebuild_expression_db(episode_beats: dict) -> dict:
+    """★ v2.2.0 — episode_beats 전체를 다시 훑어 DB를 재구축.
+
+    다시 쓰기(리라이트)로 기존 비트가 교체되면 증분 누적이 어긋난다.
+    그럴 때는 전체 재계산이 가장 안전하다. 64비트 기준 1초 안쪽.
+    """
+    db = _empty_expression_db()
+    if not episode_beats:
+        return db
+
+    def _sort_key(k):
+        try:
+            e, b = str(k).split("_")
+            return (int(e), int(b))
+        except Exception:
+            return (999, 999)
+
+    for key in sorted(episode_beats.keys(), key=_sort_key):
+        text = episode_beats.get(key) or ""
+        try:
+            e_str, b_str = str(key).split("_")
+            e_num, b_num = int(e_str), int(b_str)
+        except Exception:
+            continue
+        update_season_expression_db(db, text, e_num, b_num)
+    return db
+
+
+def get_overused_expressions(db, thresholds=None):
+    """누적 상한을 넘은 항목 반환.
+
+    ★ v2.2.0 — 층위별 임계값 분리.
+
+    Args:
+        db: 표현 누적 DB
+        thresholds: dict — {'sentences':3, 'nouns':12, 'skeletons':3}
+                    int  — 구버전 호환 모드 (문장 층위만, list 반환)
+
+    Returns:
+        dict {'sentences': [(표현, 횟수)], 'nouns': [...], 'skeletons': [...]}
+        (thresholds가 int이면 구버전과 동일하게 list 반환)
+    """
+    # 구버전 호출 호환 — get_overused_expressions(db, 3)
+    if isinstance(thresholds, int):
+        flat = db.get("sentences") if isinstance(db, dict) and isinstance(db.get("sentences"), dict) else db
+        if not flat:
+            return []
+        items = [(e, c) for e, c in flat.items() if isinstance(c, int) and c >= thresholds]
+        items.sort(key=lambda x: -x[1])
+        return items
+
+    result = {"sentences": [], "nouns": [], "skeletons": []}
+    if not isinstance(db, dict) or not db:
+        return result
+
+    th = dict(EXPRESSION_LIMITS)
+    if isinstance(thresholds, dict):
+        th.update(thresholds)
+
+    if not isinstance(db.get("sentences"), dict):
+        db = migrate_expression_db(dict(db))
+
+    for layer in ("sentences", "nouns", "skeletons"):
+        source = db.get(layer) or {}
+        if layer == "skeletons":
+            items = [
+                (k, c) for k, c in source.items()
+                if c > SKELETON_LIMITS.get(k, th["skeletons"])
+            ]
+        else:
+            items = [(k, c) for k, c in source.items() if c >= th[layer]]
+        items.sort(key=lambda x: -x[1])
+        result[layer] = items
+
+    return result
+
+
+# ═══════════════════════════════════════════════════════════
+# ★ v2.2.0 — 집필 직후 금지 패턴 자동 검증 (표시 전용)
+# 차단하지 않는다. 자동 치환도 하지 않는다.
+# 검출 결과를 보여주고 재생성 여부는 작가가 판단한다.
+# ═══════════════════════════════════════════════════════════
+
+_VALIDATION_CHECKS = [
+    # (id, 이름, 정규식, severity, 비트당 허용 횟수)
+    ("C1", "비트 헤더 유출", r'^\s*\|\s*\[[A-Z]{3}\]\s*\|', "error", 0),
+    ("C2", "엔진 메타 유출", r'(?:^|\n)\s*(?:비트\s*\d|Beat\s*\d|SCOPE|AI ESCAPE|Plant\s*[:：]|Payoff\s*[:：])', "error", 0),
+    ("C3", "카메라 지시", r'탑다운|버즈아이|카메라가|카메라는|클로즈업으로|줌인|패닝', "warning", 0),
+    ("C4", "계량 시간 표기", r'\d+(?:\.\d+)?\s*초(?![·가-힣])', "warning", 0),
+    ("C5", "대구 구문 초과", r'아니다\.|아니라\s', "warning", 1),
+    ("C6", "이중 씬번호", r'S#\d+\.\s*S#\d+', "error", 0),
+    ("C7", "시간 표기 비표준", r'—\s*(?:아침|정오|한밤중|늦은 밤|이른 아침|해질녘|황혼)', "warning", 0),
+]
+
+
+def validate_beat_output(text: str, ep_num: int, beat_num: int, db=None) -> dict:
+    """집필 결과에서 금지 패턴을 검출해 목록으로 돌려준다.
+
+    Returns:
+        {
+          'errors':   [(id, 이름, 횟수, 예시)],
+          'warnings': [(id, 이름, 횟수, 예시)],
+          'infos':    [(항목, 메시지)],
+        }
+    """
+    import re as _re
+    out = {"errors": [], "warnings": [], "infos": []}
+    if not text:
+        return out
+
+    # 본문만 검사 (자가검증 메모는 제외 — 메모에는 SCOPE 등이 정상적으로 있다)
+    body = text
+    idx = body.find('\n---\n')
+    if idx > 0:
+        body = body[:idx]
+
+    for cid, cname, pattern, severity, allowed in _VALIDATION_CHECKS:
+        try:
+            matches = _re.findall(pattern, body, flags=_re.MULTILINE)
+        except Exception:
+            continue
+        n = len(matches)
+        if n > allowed:
+            sample = ""
+            m = _re.search(pattern, body, flags=_re.MULTILINE)
+            if m:
+                start = max(0, m.start() - 18)
+                sample = body[start:m.end() + 18].replace('\n', ' ').strip()
+            entry = (cid, cname, n, sample)
+            if severity == "error":
+                out["errors"].append(entry)
+            else:
+                out["warnings"].append(entry)
+
+    # C8 — 명사 상한 근접 (DB 조회)
+    if isinstance(db, dict):
+        per_ep = db.get("per_episode") or {}
+        bucket = per_ep.get(str(ep_num)) or {}
+        noun_limit = EXPRESSION_LIMITS.get("nouns", 12)
+        hot = [
+            (w, c) for w, c in (bucket.get("nouns") or {}).items()
+            if c >= noun_limit
+        ]
+        hot.sort(key=lambda x: -x[1])
+        for w, c in hot[:8]:
+            out["infos"].append((w, f"EP{ep_num} 누적 {c}회 — 상한 {noun_limit} 도달"))
+
+        skel_bucket = bucket.get("skeletons") or {}
+        for name, cnt in sorted(skel_bucket.items(), key=lambda x: -x[1]):
+            limit = SKELETON_LIMITS.get(name, EXPRESSION_LIMITS.get("skeletons", 3))
+            if cnt > limit:
+                label = SKELETON_LABELS.get(name, name)
+                out["infos"].append((label, f"EP{ep_num} 누적 {cnt}회 — 상한 {limit} 초과"))
+
+    return out
 
 
 # ─────────────────────────────────────
@@ -665,19 +1089,30 @@ with st.sidebar:
     st.caption("버전이 최신인지 확인하세요.")
 
     # ★ v2.0 — 시즌 표현 누적 현황 (집필 중일 때만)
+    # ★ v2.2.0 — 3층(문장/명사/구문 골격) 표시로 확장
     _expr_db = st.session_state.get("season_expression_db", {}) or {}
     if _expr_db:
-        _overused = [(e, c) for e, c in _expr_db.items() if c >= 3]
-        _total = len(_expr_db)
-        _over_count = len(_overused)
+        _expr_db = migrate_expression_db(_expr_db)
+        _over = get_overused_expressions(_expr_db)
+        _n_sent = len(_expr_db.get("sentences") or {})
+        _n_noun = len(_expr_db.get("nouns") or {})
+        _o_sent = len(_over.get("sentences") or [])
+        _o_noun = len(_over.get("nouns") or [])
+        _o_skel = len(_over.get("skeletons") or [])
+        _top_noun = ""
+        _nouns_sorted = sorted((_expr_db.get("nouns") or {}).items(), key=lambda x: -x[1])[:3]
+        if _nouns_sorted:
+            _top_noun = " · ".join(f"{w} {c}" for w, c in _nouns_sorted)
         st.markdown(f"""
         <div style="padding:10px;background:#FFF9E6;border-radius:8px;border-left:3px solid #FFCB05;margin-top:12px;font-family:'Pretendard',sans-serif;">
-            <div style="font-size:.7rem;color:#7A6500;font-weight:700;letter-spacing:.05em;margin-bottom:4px;">★ 시즌 표현 누적 (v2.0)</div>
-            <div style="font-size:.78rem;color:#1A1A2E;line-height:1.4;">
-                추적 표현: <b>{_total}</b>개<br>
-                3회 이상 누적: <b style="color:#D32F2F">{_over_count}</b>개
+            <div style="font-size:.7rem;color:#7A6500;font-weight:700;letter-spacing:.05em;margin-bottom:4px;">★ 시즌 표현 누적 (v2.2)</div>
+            <div style="font-size:.78rem;color:#1A1A2E;line-height:1.5;">
+                문장 {_n_sent}개 / 상한초과 <b style="color:#D32F2F">{_o_sent}</b><br>
+                명사 {_n_noun}개 / 상한초과 <b style="color:#D32F2F">{_o_noun}</b><br>
+                구문 골격 상한초과 <b style="color:#D32F2F">{_o_skel}</b>
             </div>
-            <div style="font-size:.62rem;color:#888;margin-top:4px;">다음 비트 집필 시 자동 차단</div>
+            <div style="font-size:.62rem;color:#888;margin-top:4px;">최다 명사: {_top_noun or '—'}</div>
+            <div style="font-size:.62rem;color:#888;margin-top:2px;">다음 비트 프롬프트에 실측 카운터 주입</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1161,6 +1596,7 @@ DEFAULTS = {
     "season_expression_db": {},  # v2.0
     "monitoring_feedback": "",  # v2.0.4 — 외부 모니터링 의견
     "showrunner_notes": "",     # v2.0.4 — 쇼러너 / 작가 노트
+    "_beat_validation": {},     # ★ v2.2.0 — 마지막 비트 자동 검증 결과 (표시용)
 }
 
 for k, v in DEFAULTS.items():
@@ -3237,6 +3673,33 @@ if st.session_state["episode_plans"]:
 
         st.caption(" · ".join([f"B{b['beat']}={b['name']}" for b in EPISODE_BEATS]))
 
+        # ★ v2.2.0 — 직전 집필 비트 자동 검증 결과 (표시 전용 · 차단 없음)
+        _val = st.session_state.get("_beat_validation") or {}
+        if _val and _val.get("ep") == selected_ep:
+            _vr = _val.get("result") or {}
+            _errs = _vr.get("errors") or []
+            _warns = _vr.get("warnings") or []
+            _infos = _vr.get("infos") or []
+            if _errs or _warns or _infos:
+                with st.expander(
+                    f"🔎 Beat {_val.get('beat')} 자동 검증 — "
+                    f"오류 {len(_errs)} · 경고 {len(_warns)} · 알림 {len(_infos)}",
+                    expanded=bool(_errs),
+                ):
+                    st.caption(
+                        "검출만 합니다. 원고는 정상 저장되었고 자동 수정·자동 재생성은 하지 않습니다. "
+                        "다시 쓸지는 아래 '마지막 비트 다시 쓰기'로 판단하십시오."
+                    )
+                    for _cid, _cname, _n, _sample in _errs:
+                        st.error(f"[{_cid}] {_cname} — {_n}건\n\n예: {_sample[:120]}")
+                    for _cid, _cname, _n, _sample in _warns:
+                        st.warning(f"[{_cid}] {_cname} — {_n}건\n\n예: {_sample[:120]}")
+                    if _infos:
+                        st.info(
+                            "[C8] 누적 상한 도달\n\n"
+                            + "\n".join(f"· {_k} — {_msg}" for _k, _msg in _infos)
+                        )
+
         for b in range(8):
             key = bk(selected_ep, b)
             if key in st.session_state["episode_beats"]:
@@ -3332,8 +3795,10 @@ if st.session_state["episode_plans"]:
                 inputs_with_beats["_episode_beats"] = st.session_state.get("episode_beats", {})
 
                 # ★ v2.0 — 시즌 표현 누적 DB (없으면 빈 dict)
-                if "season_expression_db" not in st.session_state:
-                    st.session_state["season_expression_db"] = {}
+                # ★ v2.2.0 — 구버전 평면 스키마는 여기서 층위 스키마로 변환
+                st.session_state["season_expression_db"] = migrate_expression_db(
+                    st.session_state.get("season_expression_db")
+                )
                 _season_expr_db = st.session_state["season_expression_db"]
 
                 prompt = build_write_episode_beat_prompt(
@@ -3363,6 +3828,17 @@ if st.session_state["episode_plans"]:
                     st.session_state["season_expression_db"],
                     result, selected_ep, next_beat,
                 )
+
+                # ★ v2.2.0 — 집필 직후 금지 패턴 자동 검증 (표시 전용, 차단 없음)
+                # st.rerun() 직후에도 결과가 보이도록 세션에 저장한다.
+                st.session_state["_beat_validation"] = {
+                    "ep": selected_ep,
+                    "beat": next_beat,
+                    "result": validate_beat_output(
+                        result, selected_ep, next_beat,
+                        st.session_state["season_expression_db"],
+                    ),
+                }
 
                 # v1.7: 비트 구조 유형 자동 추출
                 if "beat_structure_types" not in st.session_state:
@@ -3407,6 +3883,19 @@ if st.session_state["episode_plans"]:
                 with st.spinner(f"Beat {last_done}을 다시 쓰고 있습니다..."):
                     result = stream_response(SYSTEM_PROMPT, prompt, MAX_TOKENS_REWRITE)
                 st.session_state["episode_beats"][bk(selected_ep, last_done)] = result
+                # ★ v2.2.0 — 비트가 교체되었으므로 표현 누적 DB를 전체 재계산.
+                # 증분 누적만 하면 옛 원고의 어휘가 DB에 남아 카운터가 어긋난다.
+                st.session_state["season_expression_db"] = rebuild_expression_db(
+                    st.session_state.get("episode_beats", {})
+                )
+                st.session_state["_beat_validation"] = {
+                    "ep": selected_ep,
+                    "beat": last_done,
+                    "result": validate_beat_output(
+                        result, selected_ep, last_done,
+                        st.session_state["season_expression_db"],
+                    ),
+                }
                 st.rerun()
 
 
@@ -3599,6 +4088,14 @@ def _import_session_backup(raw_bytes: bytes) -> dict:
 
     if pending:
         st.session_state["_pending_widget_sync"] = pending
+
+    # ★ v2.2.0 — 구버전 백업(v2.0/v2.1)의 평면 season_expression_db를
+    # 층위 스키마로 승격. 문장 누적값은 보존되고 명사/골격 층은 비어서 시작한다.
+    st.session_state["season_expression_db"] = migrate_expression_db(
+        st.session_state.get("season_expression_db")
+    )
+    # 복원 직후에는 직전 검증 결과가 무의미하므로 비운다.
+    st.session_state["_beat_validation"] = {}
 
     return meta
 
