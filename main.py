@@ -269,6 +269,7 @@
 """
 
 import streamlit as st
+from bj_header import render_header  # 공통 헤더 (Writer Engine 기준)
 import anthropic
 import io
 import re
@@ -1637,14 +1638,7 @@ MAX_TOKENS_REWRITE = 16000
 # ──────────────────────────────────────────────
 # 브랜드 헤더 — Creator Engine과 동일 패턴
 # ──────────────────────────────────────────────
-st.markdown(
-    '<div style="text-align:center;padding:1rem 0 0 0">'
-    '<div class="header">B L U E &nbsp; J E A N S &nbsp; P I C T U R E S</div>'
-    '<div class="brand-title">SERIES ENGINE</div>'
-    '<div class="sub">Y O U N G &nbsp; · &nbsp; V I N T A G E &nbsp; · &nbsp; F R E E &nbsp; · &nbsp; I N N O V A T I V E</div>'
-    '</div>',
-    unsafe_allow_html=True
-)
+render_header("SERIES ENGINE")
 st.caption(f"집필: {MODEL_WRITE} · 구조: {MODEL_PLAN}")
 
 
