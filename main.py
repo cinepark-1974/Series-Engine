@@ -1638,7 +1638,7 @@ MAX_TOKENS_REWRITE = 16000
 # ──────────────────────────────────────────────
 # 브랜드 헤더 — Creator Engine과 동일 패턴
 # ──────────────────────────────────────────────
-render_header("SERIES ENGINE")
+render_header("SERIES ENGINE", tagline="STREAMING SERIES")
 st.caption(f"집필: {MODEL_WRITE} · 구조: {MODEL_PLAN}")
 
 
